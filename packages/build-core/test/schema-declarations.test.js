@@ -172,7 +172,17 @@ test("generates framework-specific Rust store exports", () => {
     actions: [{ name: "add", params: [{ name: "amount", type: "u32" }] }],
   };
 
-  const vue = generateRustStoreDeclaration(store, "vue");
+  const types = [{
+    version: 1,
+    kind: "type",
+    id: "src/Store.rs:CartSnapshot:to",
+    name: "CartSnapshot",
+    group: "src/Store.rs",
+    direction: "to",
+    shape: { kind: "struct", fields: [{ name: "count", type: "u32" }, { name: "history", type: "Vec<String>" }] },
+  }];
+
+  const vue = generateRustStoreDeclaration(store, "vue", types);
   assert.match(vue, /VooyaStoreOptions/);
   assert.match(vue, /import type \{ Ref \} from "vue"/);
   assert.match(vue, /export declare function createCartStore\(\): Promise<CartStore>;/);
@@ -180,20 +190,22 @@ test("generates framework-specific Rust store exports", () => {
   assert.match(vue, /export declare function useCart\(options\?: VooyaStoreOptions\)/);
   assert.match(vue, /state: Readonly<Ref<CartSnapshot \| undefined>>/);
 
-  const react = generateRustStoreDeclaration(store, "react");
-  assert.match(react, /export type CartSnapshot = Record<string, unknown>;/);
-  assert.doesNotMatch(react, /CartSnapshot = CartSnapshot/);
+  const react = generateRustStoreDeclaration(store, "react", types);
+  assert.match(react, /export interface CartSnapshot/);
+  assert.match(react, /count: number/);
+  assert.match(react, /history: Array<string>/);
+  assert.doesNotMatch(react, /export type CartSnapshot = CartSnapshot;/);
   assert.match(react, /VooyaStoreOptions/);
   assert.match(react, /export declare function useCart\(options\?: VooyaStoreOptions\)/);
   assert.match(react, /state: CartSnapshot \| undefined/);
   assert.match(react, /add\(...args: \[number\]\): void/);
 
-  const solid = generateRustStoreDeclaration(store, "solid");
+  const solid = generateRustStoreDeclaration(store, "solid", types);
   assert.match(solid, /import type \{ Accessor \} from "solid-js"/);
   assert.match(solid, /from "@vooya\/solid"/);
   assert.match(solid, /state: Accessor<CartSnapshot \| undefined>/);
 
-  const svelte = generateRustStoreDeclaration(store, "svelte");
+  const svelte = generateRustStoreDeclaration(store, "svelte", types);
   assert.match(svelte, /import type \{ Readable \} from "svelte\/store"/);
   assert.match(svelte, /from "@vooya\/svelte"/);
   assert.match(svelte, /state: Readable<CartSnapshot \| undefined>/);

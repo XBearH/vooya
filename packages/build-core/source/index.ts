@@ -499,7 +499,7 @@ export function buildApplication({
         ...schemaIndex.stores.map((store) => ({
           componentId: store.id,
           framework,
-          code: generateRustStoreDeclaration(store, framework),
+          code: generateRustStoreDeclaration(store, framework, schemaIndex.types),
         })),
       ],
     watchedFiles: [
