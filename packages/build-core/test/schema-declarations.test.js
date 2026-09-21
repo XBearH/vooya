@@ -126,6 +126,21 @@ test("emits only types reachable from a component contract", () => {
   assert.doesNotMatch(code, /export interface Unused/);
 });
 
+test("rejects same-named reachable types from different source groups", () => {
+  const contract = {
+    component: { version: 1, kind: "component", id: "cart::Cart", name: "Cart", params: [] },
+    props: { version: 1, kind: "props", id: "cart::Props", name: "Props", fields: [{ name: "selection", type: "Selection" }] },
+  };
+  assert.throws(() => generateRustSchemaDeclaration({
+    framework: "vue",
+    contract,
+    types: [
+      { version: 1, kind: "type", id: "models:Selection:from", name: "Selection", group: "src/models.rs", direction: "from", shape: { kind: "struct", fields: [{ name: "id", type: "i32" }] } },
+      { version: 1, kind: "type", id: "filters:Selection:from", name: "Selection", group: "src/filters.rs", direction: "from", shape: { kind: "struct", fields: [{ name: "query", type: "String" }] } },
+    ],
+  }), /Candidates are declared in: src\/models\.rs, src\/filters\.rs/);
+});
+
 test("generates Solid declarations from the same Rust component contract", () => {
   const code = generateRustSchemaDeclaration({
     framework: "solid",
