@@ -59,8 +59,12 @@ function generateTypes(types: RustTypeSchema[], contract: RustComponentContract)
   const byName = new Map<string, RustTypeSchema>();
   for (const type of types.filter((type) => required.has(type.name))) {
     const existing = byName.get(type.name);
-    if (existing && JSON.stringify(existing.shape) !== JSON.stringify(type.shape)) {
-      throw new Error(`Ambiguous Rust type schema "${type.name}".`);
+    if (existing && (JSON.stringify(existing.shape) !== JSON.stringify(type.shape) || existing.group !== type.group)) {
+      const groups = [existing.group, type.group].filter(Boolean).join(", ");
+      throw new Error(
+        `Ambiguous Rust type schema "${type.name}" referenced by ${contract.component.id}. ` +
+        `Candidates are declared in: ${groups}. Use a unique public ABI type name until path-aware type schema resolution is available.`,
+      );
     }
     byName.set(type.name, type);
   }
