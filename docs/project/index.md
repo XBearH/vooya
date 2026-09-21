@@ -27,7 +27,10 @@ currently make a compatibility claim for that path.
 - [Vooya FS](https://github.com/vooyajs/fs): native Node.js batch filesystem
   operations, continuing Rush-FS under the Vooya boundary model.
 - [Vooya Lab](https://vooyajs.github.io/vooya-lab/): runnable experiments and
-  evidence for Rust, WASM, ABI, memory, and host-runtime decisions.
+  evidence for Rust, WASM, ABI, memory, and host-runtime decisions. New cases
+  follow the Lab's [case specification standard](https://github.com/vooyajs/vooya-lab/blob/main/docs/case-spec.md);
+  findings that change compiler, ABI, runtime, adapters, or tooling are fixed
+  here rather than kept as Lab-only workarounds.
 
 These projects share principles, not support matrices. Browser compatibility in
 this repository does not imply Node filesystem compatibility, or vice versa.

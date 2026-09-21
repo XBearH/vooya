@@ -17,7 +17,12 @@ without creating a second documentation repository.
 The [Vooya Lab](https://vooyajs.github.io/vooya-lab/) turns these authoring and
 compatibility boundaries into runnable browser cases. Its source lives in the
 [vooyajs/vooya-lab](https://github.com/vooyajs/vooya-lab) repository; the lab
-links back here for the contracts and guides behind each case.
+links back here for the contracts and guides behind each case. Contributors
+should start with the Lab's [case specification standard](https://github.com/vooyajs/vooya-lab/blob/main/docs/case-spec.md)
+and [case portfolio strategy](https://github.com/vooyajs/vooya-lab/blob/main/docs/case-portfolio.md):
+the Lab owns case metadata, source presentation, and browser evidence, while
+this repository owns any compiler, ABI, runtime, adapter, or toolchain fix a
+case reveals.
 
 ## Related native project
 
