@@ -84,7 +84,7 @@ export function buildPrecompiledVueArtifact({ packageRoot, source, outputDir } =
   writeFileSync(resolve(distribution, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
   writeFileSync(resolve(distribution, "index.js"), generatePrecompiledVueEntry({ manifest, definition, binding }));
   writeFileSync(resolve(distribution, "index.d.ts"), generatePrecompiledVueDeclaration(component, manifest));
-  assertArtifactOutput(distribution);
+  validatePrecompiledVueArtifactOutput(distribution);
   return manifest;
 }
 
@@ -141,7 +141,7 @@ function resolveArtifactOutput(packageRoot, outputDir) {
   return output;
 }
 
-function assertArtifactOutput(outputDir) {
+export function validatePrecompiledVueArtifactOutput(outputDir) {
   const expected = ["manifest.json", "index.js", "index.d.ts", "wasm/vooya_app.js", "wasm/vooya_app_bg.wasm"];
   for (const file of expected) {
     if (!existsSync(resolve(outputDir, file))) {
@@ -154,8 +154,8 @@ function assertArtifactOutput(outputDir) {
       throw new Error(`Vooya precompiled Vue artifact manifest ${name} must be a package-relative path.`);
     }
     const asset = resolve(outputDir, path);
-    if (!isPathInside(asset, outputDir) || !existsSync(asset)) {
-      throw new Error(`Vooya precompiled Vue artifact manifest ${name} is missing from dist: ${String(path)}.`);
+    if (!isPathInside(asset, outputDir) || !isFile(asset)) {
+      throw new Error(`Vooya precompiled Vue artifact manifest ${name} must reference a file in dist: ${String(path)}.`);
     }
   }
   for (const file of artifactFiles(outputDir)) {
@@ -167,6 +167,10 @@ function assertArtifactOutput(outputDir) {
       throw new Error(`Vooya precompiled Vue artifact must not include an absolute output path in ${file}.`);
     }
   }
+}
+
+function isFile(path) {
+  try { return statSync(path).isFile(); } catch { return false; }
 }
 
 function artifactFiles(directory, prefix = "") {
