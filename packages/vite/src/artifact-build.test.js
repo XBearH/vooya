@@ -33,6 +33,10 @@ test("builds a Vue artifact from an explicitly named non-prefix package", () => 
     }
     assert.match(readFileSync(resolve(fixture.root, "dist/index.js"), "utf8"), /from "@vooya\/vue"/);
     assert.match(readFileSync(resolve(fixture.root, "dist/index.d.ts"), "utf8"), /VooyaArtifactManifest/);
+    assert.equal(existsSync(resolve(fixture.root, "dist/.artifact-build")), false);
+    assert.equal(existsSync(resolve(fixture.root, "dist/component/PortableCounter.voo")), false);
+    const manifestText = readFileSync(resolve(fixture.root, "dist/manifest.json"), "utf8");
+    assert.doesNotMatch(manifestText, new RegExp(fixture.root.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   } finally {
     fixture.cleanup();
   }

@@ -2,7 +2,7 @@
 // intentionally open-ended. Keep that boundary untyped while the emitted
 // public JavaScript surface is migrated to TypeScript source.
 // @ts-nocheck
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -148,6 +148,36 @@ function assertArtifactOutput(outputDir) {
       throw new Error(`Vooya precompiled Vue artifact build did not produce expected output ${file}.`);
     }
   }
+  const manifest = JSON.parse(readFileSync(resolve(outputDir, "manifest.json"), "utf8"));
+  for (const [name, path] of Object.entries({ wasm: manifest.wasm, types: manifest.types })) {
+    if (typeof path !== "string" || !path.startsWith("./") || !isArtifactRelativePath(path)) {
+      throw new Error(`Vooya precompiled Vue artifact manifest ${name} must be a package-relative path.`);
+    }
+    const asset = resolve(outputDir, path);
+    if (!isPathInside(asset, outputDir) || !existsSync(asset)) {
+      throw new Error(`Vooya precompiled Vue artifact manifest ${name} is missing from dist: ${String(path)}.`);
+    }
+  }
+  for (const file of artifactFiles(outputDir)) {
+    if (file.includes(".vooya") || file.includes(".artifact-build") || file.endsWith(".voo") || file.endsWith("Cargo.toml")) {
+      throw new Error(`Vooya precompiled Vue artifact must not include build input ${file}.`);
+    }
+    const content = readFileSync(resolve(outputDir, file));
+    if (content.includes(Buffer.from(outputDir))) {
+      throw new Error(`Vooya precompiled Vue artifact must not include an absolute output path in ${file}.`);
+    }
+  }
+}
+
+function artifactFiles(directory, prefix = "") {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const path = `${prefix}${entry.name}`;
+    return entry.isDirectory() ? artifactFiles(resolve(directory, entry.name), `${path}/`) : [path];
+  });
+}
+
+function isArtifactRelativePath(path) {
+  return !path.includes("\\") && !path.split("/").includes("..") && !isAbsolute(path);
 }
 
 function isSemverVersion(version) {
