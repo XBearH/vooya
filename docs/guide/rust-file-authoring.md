@@ -290,10 +290,14 @@ framework hook. The declaration remains framework-neutral; Vue wraps it in a
 `Ref`, Solid in an `Accessor`, and Svelte in a `Readable`.
 
 `#[derive(FromJs)]` and `#[derive(ToJs)]` make named structs and ABI-v1 unit
-enums available both at runtime and in generated declarations. Snapshot types
-must remain owned, non-generic, and non-recursive; ambiguous same-named types
-from different source groups fail declaration generation rather than selecting
-an arbitrary shape.
+enums available both at runtime and in generated declarations. When a referenced
+named type has no schema record, declarations use `unknown` because a hand-written
+conversion may emit any JavaScript value. A derived struct whose fields cannot
+be described falls back to `Record<string, unknown>` because its object shape is
+known. Supported surrounding fields and containers remain precise. Snapshot types must remain
+owned, non-generic, and non-recursive; ambiguous same-named types from different
+source groups fail declaration generation rather than selecting an arbitrary
+shape.
 
 ```ts
 import type { Ref } from "vue";
