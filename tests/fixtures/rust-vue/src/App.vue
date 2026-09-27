@@ -1,18 +1,18 @@
-<script setup>
+<script setup lang="ts">
 import Abi from "./Abi.rs";
 import Counter from "./Counter.rs";
 import { useCart } from "./Store.rs";
 import { ref } from "vue";
 
 const { state, add } = useCart();
-const cartDetails = () => state.value?.totals.item_count ?? 0;
-const selected = ref(null);
+const cartDetails = (): number => state.value?.totals.item_count ?? 0;
+const selected = ref<number | null>(null);
 const abiPayload = ref("none");
 const abiProps = {
   small: 3,
   precise: 9007199254740993n,
   optional: null,
-  pair: [7, "pair"],
+  pair: [7, "pair"] as [number, string],
   labels: { alpha: 1n, beta: 2n },
 };
 
@@ -20,11 +20,11 @@ function addItem() {
   add(1);
 }
 
-function handleSelected(value) {
+function handleSelected(value: number) {
   selected.value = value;
 }
 
-function handleAbiPayload(value) {
+function handleAbiPayload(value: bigint) {
   abiPayload.value = value.toString();
 }
 </script>

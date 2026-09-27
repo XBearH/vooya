@@ -140,9 +140,7 @@ function verifyTypeConsumer(packedPackages) {
         moduleResolution: "NodeNext",
         strict: true,
         noEmit: true,
-        // The release gate owns the packed Vooya declarations and consumer
-        // source. Do not fail it on extension mistakes in transitive .d.ts files.
-        skipLibCheck: true,
+        skipLibCheck: false,
       },
       include: ["consumer.ts"],
     }, null, 2)}\n`,

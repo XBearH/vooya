@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
+import ts from "typescript";
 
 import {
   generateRustSchemaDeclaration,
@@ -98,16 +101,46 @@ test("generates named struct and enum declarations for ABI schema types", () => 
     { version: 1, kind: "type", id: "Selection:to", name: "Selection", direction: "to", shape: { kind: "struct", fields: [{ name: "id", type: "i32" }, { name: "tags", type: "Vec<String>" }] } },
     { version: 1, kind: "type", id: "Limit:to", name: "Limit", direction: "to", shape: { kind: "enum", variants: ["Reached", "Rejected"] } },
   ];
-  const vue = generateRustSchemaDeclaration({ framework: "vue", contract, types });
-  const react = generateRustSchemaDeclaration({ framework: "react", contract, types });
-  for (const code of [vue, react]) {
-    assert.match(code, /export interface Selection/);
-    assert.match(code, /id: number/);
-    assert.match(code, /tags: Array<string>/);
-    assert.match(code, /export type Limit = \{ type: "Reached" \} \| \{ type: "Rejected" \}/);
-    assert.match(code, /selection: Selection/);
+  const directory = mkdtempSync(resolve(import.meta.dirname, ".named-types-"));
+  try {
+    for (const framework of ["vue", "react", "solid", "svelte"]) {
+      const code = generateRustSchemaDeclaration({ framework, contract, types });
+      writeFileSync(resolve(directory, `${framework}.d.ts`), code);
+      const props = framework === "vue"
+        ? "InstanceType<typeof Cart>['$props']"
+        : "ComponentProps<typeof Cart>";
+      const frameworkPackage = framework === "solid" ? "solid-js" : framework;
+      const consumer = resolve(directory, `${framework}-consumer.ts`);
+      writeFileSync(consumer, `
+import Cart, { type Selection, type Limit } from "./${framework}.js";
+${framework === "vue" ? "" : `import type { ComponentProps } from "${frameworkPackage}";`}
+const selection: Selection = { id: 1, tags: ["selected"] };
+const limit: Limit = { type: "Reached" };
+const props: ${props} = { selection, onChanged: (value: Limit) => {} };
+// @ts-expect-error Rust integer fields must reject strings.
+const invalid: Selection = { id: "wrong", tags: [] };
+// @ts-expect-error Component props must preserve the named field type.
+const invalidProps: ${props} = { selection: { id: "wrong", tags: [] } };
+`);
+      const program = ts.createProgram([consumer], {
+        noEmit: true,
+        strict: true,
+        skipLibCheck: false,
+        target: ts.ScriptTarget.ES2022,
+        module: ts.ModuleKind.ESNext,
+        moduleResolution: ts.ModuleResolutionKind.Bundler,
+        types: [],
+      });
+      const diagnostics = ts.getPreEmitDiagnostics(program);
+      assert.equal(diagnostics.length, 0, `${framework}: ${ts.formatDiagnostics(diagnostics, {
+        getCanonicalFileName: (file) => file,
+        getCurrentDirectory: () => directory,
+        getNewLine: () => "\n",
+      })}`);
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
   }
-  assert.match(react, /onChanged\?: \(limit: Limit\) => void/);
 });
 
 test("emits only types reachable from a component contract", () => {
