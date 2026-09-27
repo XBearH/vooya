@@ -492,14 +492,14 @@ export function buildApplication({
         }))
       : [
         ...schemaContracts.map((contract) => ({
-        componentId: contract.component.id,
-        framework,
-        code: generateRustSchemaDeclaration({ contract, framework }),
+          componentId: contract.component.id,
+          framework,
+          code: generateRustSchemaDeclaration({ contract, framework, types: schemaIndex.types }),
         })),
         ...schemaIndex.stores.map((store) => ({
           componentId: store.id,
           framework,
-          code: generateRustStoreDeclaration(store, framework),
+          code: generateRustStoreDeclaration(store, framework, schemaIndex.types),
         })),
       ],
     watchedFiles: [
