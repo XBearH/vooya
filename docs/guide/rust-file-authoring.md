@@ -301,6 +301,22 @@ as `models::Selection` for a type owned by another module. If either lookup has
 multiple incompatible schema candidates, declaration generation fails and lists
 each schema ID and source group rather than selecting an arbitrary shape.
 
+When two resolved types share a short name in the same declaration, both receive
+module prefixes: `models::Selection` and `filters::Selection` become
+`ModelsSelection` and `FiltersSelection`. Nested fields, props, events, and Store
+signatures use the same resolved names. Names are assigned before rendering and
+are independent of schema traversal order. Longer source prefixes (then numeric
+suffixes) disambiguate aliases that are already occupied; unique short names stay
+unchanged. Missing schemas remain `unknown`, even if another module defines the
+same short name.
+
+Path resolution uses conventional `.rs` / `mod.rs` source groups, including
+`self::`, `super::`, and `crate::` paths (`crate::` requires a `src/` root).
+This is not full Rust name resolution: `use` aliases, inline modules, and
+`#[path]` overrides still require richer schema metadata. The generator builds a
+name index once per declaration and caches scoped lookups during that generation;
+it does not retain a process-wide schema cache.
+
 ```ts
 import type { Ref } from "vue";
 import type { VooyaStoreOptions } from "@vooya/vue";

@@ -368,3 +368,83 @@ test("rejects a named action type that collides with the generated snapshot alia
   } }];
   assert.throws(() => generateRustStoreDeclaration(store, "vue", types), /conflicts with the generated snapshot alias/);
 });
+
+test("renames both qualified types and preserves scoped references in every framework", () => {
+  const types = [
+    { version: 1, kind: "type", id: "models:Selection:from", name: "Selection", group: "src/models.rs", direction: "from", shape: { kind: "struct", fields: [{ name: "id", type: "u32" }] } },
+    { version: 1, kind: "type", id: "filters:Selection:from", name: "Selection", group: "src/filters.rs", direction: "from", shape: { kind: "struct", fields: [{ name: "query", type: "String" }] } },
+    { version: 1, kind: "type", id: "models:Envelope:to", name: "Envelope", group: "src/models.rs", direction: "to", shape: { kind: "struct", fields: [{ name: "items", type: "Vec<Selection>" }] } },
+  ];
+  const contract = {
+    component: { version: 1, kind: "component", id: "ui::Picker", name: "Picker", group: "src/ui.rs", params: [] },
+    props: { version: 1, kind: "props", id: "ui::Props", name: "Props", group: "src/ui.rs", fields: [
+      { name: "model", type: "models::Selection" },
+      { name: "filter", type: "filters::Selection" },
+      { name: "envelope", type: "models::Envelope" },
+      { name: "opaque", type: "Option<opaque::Selection>" },
+    ] },
+    events: { version: 1, kind: "events", id: "filters::Events", name: "Events", group: "src/filters.rs", methods: [
+      { name: "changed", params: [{ name: "value", type: "Selection" }] },
+    ] },
+  };
+  const directory = mkdtempSync(resolve(import.meta.dirname, ".scoped-types-"));
+  try {
+    for (const framework of ["vue", "react", "solid", "svelte"]) {
+      const code = generateRustSchemaDeclaration({ framework, contract, types });
+      assert.equal(code, generateRustSchemaDeclaration({ framework, contract, types: [...types].reverse() }));
+      assert.match(code, /items: Array<ModelsSelection>/);
+      assert.match(code, /value: FiltersSelection/);
+      assert.match(code, /opaque\?: unknown \| null/);
+      assert.doesNotMatch(code, /export interface Selection\b/);
+      writeFileSync(resolve(directory, `${framework}.d.ts`), code);
+      const consumer = resolve(directory, `${framework}-consumer.ts`);
+      const props = framework === "vue" ? "InstanceType<typeof Picker>['$props']" : "ComponentProps<typeof Picker>";
+      writeFileSync(consumer, `
+import Picker, { type ModelsSelection, type FiltersSelection, type Envelope } from "./${framework}.js";
+${framework === "vue" ? "" : `import type { ComponentProps } from "${framework === "solid" ? "solid-js" : framework}";`}
+const model: ModelsSelection = { id: 1 };
+const filter: FiltersSelection = { query: "active" };
+const envelope: Envelope = { items: [model] };
+const props: ${props} = { model, filter, envelope, onChanged: (value: FiltersSelection) => {} };
+// @ts-expect-error Same short Rust name does not imply the same type.
+const wrongModel: ModelsSelection = filter;
+// @ts-expect-error Nested references must retain the models scope.
+const wrongEnvelope: Envelope = { items: [filter] };
+// @ts-expect-error Props must use the resolved alias, not the other Selection.
+const wrongProps: ${props} = { model: filter, filter, envelope };
+`);
+      const program = ts.createProgram([consumer], {
+        noEmit: true, strict: true, skipLibCheck: false,
+        target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext,
+        moduleResolution: ts.ModuleResolutionKind.Bundler, types: [],
+      });
+      const diagnostics = ts.getPreEmitDiagnostics(program);
+      assert.equal(diagnostics.length, 0, ts.formatDiagnostics(diagnostics, {
+        getCanonicalFileName: (file) => file, getCurrentDirectory: () => directory, getNewLine: () => "\n",
+      }));
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+  const store = { version: 1, kind: "store", id: "ui::Picker", name: "Picker", group: "src/ui.rs", snapshot: "models::Envelope", actions: [
+    { name: "filter", params: [{ name: "value", type: "filters::Selection" }] },
+  ] };
+  const code = generateRustStoreDeclaration(store, "vue", types);
+  assert.match(code, /items: Array<ModelsSelection>/);
+  assert.match(code, /filter\(\.\.\.args: \[FiltersSelection\]\): void/);
+  assert.match(code, /export type PickerSnapshot = Envelope/);
+});
+
+test("resolves crate, self and super references in conventional source layouts", () => {
+  for (const [group, reference, target] of [
+    ["src/ui.rs", "crate::models::Selection", "src/models.rs"],
+    ["src/ui.rs", "super::models::Selection", "src/models.rs"],
+    ["src/models/mod.rs", "self::Selection", "src/models/mod.rs"],
+    ["D:\\project\\src\\ui.rs", "crate::models::Selection", "D:\\project\\src\\models.rs"],
+    ["src/lib.rs", "crate::Selection", "src/lib.rs"],
+  ]) {
+    const store = { version: 1, kind: "store", id: "Store", name: "Store", group, snapshot: reference, actions: [] };
+    const types = [{ version: 1, kind: "type", id: "Selection:to", name: "Selection", group: target, direction: "to", shape: { kind: "struct", fields: [{ name: "id", type: "u32" }] } }];
+    assert.match(generateRustStoreDeclaration(store, "vue", types), /export type StoreSnapshot = Selection;/, reference);
+  }
+});
