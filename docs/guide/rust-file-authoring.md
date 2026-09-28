@@ -295,9 +295,27 @@ named type has no schema record, declarations use `unknown` because a hand-writt
 conversion may emit any JavaScript value. A derived struct whose fields cannot
 be described falls back to `Record<string, unknown>` because its object shape is
 known. Supported surrounding fields and containers remain precise. Snapshot types must remain
-owned, non-generic, and non-recursive; ambiguous same-named types from different
-source groups fail declaration generation rather than selecting an arbitrary
-shape.
+owned, non-generic, and non-recursive. An unqualified named type resolves first
+within its component or store source group. Use a Rust-qualified reference such
+as `models::Selection` for a type owned by another module. If either lookup has
+multiple incompatible schema candidates, declaration generation fails and lists
+each schema ID and source group rather than selecting an arbitrary shape.
+
+When two resolved types share a short name in the same declaration, both receive
+module prefixes: `models::Selection` and `filters::Selection` become
+`ModelsSelection` and `FiltersSelection`. Nested fields, props, events, and Store
+signatures use the same resolved names. Names are assigned before rendering and
+are independent of schema traversal order. Longer source prefixes (then numeric
+suffixes) disambiguate aliases that are already occupied; unique short names stay
+unchanged. Missing schemas remain `unknown`, even if another module defines the
+same short name.
+
+Path resolution uses conventional `.rs` / `mod.rs` source groups, including
+`self::`, `super::`, and `crate::` paths (`crate::` requires a `src/` root).
+This is not full Rust name resolution: `use` aliases, inline modules, and
+`#[path]` overrides still require richer schema metadata. The generator builds a
+name index once per declaration and caches scoped lookups during that generation;
+it does not retain a process-wide schema cache.
 
 ```ts
 import type { Ref } from "vue";
@@ -328,7 +346,7 @@ Props, event payloads, action arguments, and snapshots use one shared mapping:
 | `Option<T>` | `T \| null` | `undefined` and `null` input decode as `None`; output is `null`. |
 | `(A, B, ...)` | `[A, B, ...]` | Fixed-length tuples. |
 | `HashMap<String, T>` / `BTreeMap<String, T>` | `Record<string, T>` | Only string keys are supported. |
-| Named struct/enum with `FromJs`/`ToJs` | Generated interface/unit union | Fields must remain owned ABI-v1 values; ambiguous source groups are rejected. |
+| Named struct/enum with `FromJs`/`ToJs` | Generated interface/unit union | Fields must remain owned ABI-v1 values; resolution uses the source group or a qualified Rust module path, and ambiguity is rejected. |
 
 Borrowed values, recursive public types, arbitrary generics, non-string-key
 maps, and zero-copy `TypedArray` transport are outside ABI v1. Keep those
