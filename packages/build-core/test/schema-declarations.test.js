@@ -224,7 +224,50 @@ test("rejects same-named reachable types from different source groups", () => {
       { version: 1, kind: "type", id: "models:Selection:from", name: "Selection", group: "src/models.rs", direction: "from", shape: { kind: "struct", fields: [{ name: "id", type: "i32" }] } },
       { version: 1, kind: "type", id: "filters:Selection:from", name: "Selection", group: "src/filters.rs", direction: "from", shape: { kind: "struct", fields: [{ name: "query", type: "String" }] } },
     ],
-  }), /Candidates are declared in: src\/models\.rs, src\/filters\.rs/);
+  }), /Candidates are: models:Selection:from \(src\/models\.rs\), filters:Selection:from \(src\/filters\.rs\)/);
+});
+
+test("resolves same-named types in the owning component source group", () => {
+  const types = [
+    { version: 1, kind: "type", id: "models:Selection:from", name: "Selection", group: "src/models.rs", direction: "from", shape: { kind: "struct", fields: [{ name: "id", type: "i32" }] } },
+    { version: 1, kind: "type", id: "filters:Selection:from", name: "Selection", group: "src/filters.rs", direction: "from", shape: { kind: "struct", fields: [{ name: "query", type: "String" }] } },
+  ];
+  const models = generateRustSchemaDeclaration({
+    framework: "vue",
+    contract: {
+      component: { version: 1, kind: "component", id: "models::Picker", name: "Picker", group: "src/models.rs", params: [] },
+      props: { version: 1, kind: "props", id: "models::PickerProps", name: "PickerProps", group: "src/models.rs", fields: [{ name: "selection", type: "Selection" }] },
+    },
+    types,
+  });
+  const filters = generateRustSchemaDeclaration({
+    framework: "react",
+    contract: {
+      component: { version: 1, kind: "component", id: "filters::Picker", name: "Picker", group: "src/filters.rs", params: [] },
+      props: { version: 1, kind: "props", id: "filters::PickerProps", name: "PickerProps", group: "src/filters.rs", fields: [{ name: "selection", type: "Selection" }] },
+    },
+    types,
+  });
+  assert.match(models, /export interface Selection \{\n  id: number;/);
+  assert.doesNotMatch(models, /query: string/);
+  assert.match(filters, /export interface Selection \{\n  query: string;/);
+  assert.doesNotMatch(filters, /id: number/);
+});
+
+test("resolves a qualified Rust type reference outside the component source group", () => {
+  const code = generateRustSchemaDeclaration({
+    framework: "vue",
+    contract: {
+      component: { version: 1, kind: "component", id: "ui::Picker", name: "Picker", group: "src/ui.rs", params: [] },
+      props: { version: 1, kind: "props", id: "ui::PickerProps", name: "PickerProps", group: "src/ui.rs", fields: [{ name: "selection", type: "models::Selection" }] },
+    },
+    types: [
+      { version: 1, kind: "type", id: "models:Selection:from", name: "Selection", group: "D:/project/src/models.rs", direction: "from", shape: { kind: "struct", fields: [{ name: "id", type: "i32" }] } },
+      { version: 1, kind: "type", id: "filters:Selection:from", name: "Selection", group: "src/filters.rs", direction: "from", shape: { kind: "struct", fields: [{ name: "query", type: "String" }] } },
+    ],
+  });
+  assert.match(code, /export interface Selection \{\n  id: number;/);
+  assert.doesNotMatch(code, /query: string/);
 });
 
 test("generates Solid declarations from the same Rust component contract", () => {

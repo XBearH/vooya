@@ -16,7 +16,8 @@ export function generateRustSchemaDeclaration({ contract, framework, types = [] 
   const component = contract.component;
   const props = contract.props;
   const events = contract.events;
-  const { code: typeCode, names } = generateTypes(types, referencedTypeNames(contract), component.id);
+  const ownerGroup = props?.group ?? events?.group ?? component.group;
+  const { code: typeCode, names } = generateTypes(types, referencedTypeNames(contract), component.id, ownerGroup);
   const propsCode = props ? generateProps(props, component.name, names) : `interface ${component.name}Props {}`;
   const eventsCode = events ? generateEvents(events, component.name, names) : `type ${component.name}Events = ["error"];`;
   if (framework === "vue") {
@@ -38,31 +39,30 @@ export function generateRustSchemaDeclaration({ contract, framework, types = [] 
   throw new Error(`Unknown schema declaration framework "${framework}".`);
 }
 
-function generateTypes(types: RustTypeSchema[], required: Set<string>, ownerId: string): { code: string; names: Set<string> } {
-  const pending = [...required];
+function generateTypes(types: RustTypeSchema[], required: Set<string>, ownerId: string, ownerGroup?: string | null): { code: string; names: Set<string> } {
+  const pending = [...required].map((reference) => ({ reference, group: ownerGroup }));
+  const selected = new Map<string, RustTypeSchema>();
   while (pending.length) {
-    const name = pending.pop();
-    for (const type of types.filter((candidate) => candidate.name === name)) {
-      if (type.shape.kind === "struct") {
-        for (const field of type.shape.fields) {
-          for (const nested of referencedTypeNamesFromType(field.type)) {
-            if (!required.has(nested)) {
-              required.add(nested);
-              pending.push(nested);
-            }
-          }
+    const pendingReference = pending.pop();
+    if (!pendingReference) continue;
+    const type = resolveNamedType(types, pendingReference.reference, pendingReference.group, ownerId);
+    if (!type || selected.has(type.id)) continue;
+    selected.set(type.id, type);
+    if (type.shape.kind === "struct") {
+      for (const field of type.shape.fields) {
+        for (const nested of referencedTypeNamesFromType(field.type)) {
+          pending.push({ reference: nested, group: type.group });
         }
       }
     }
   }
   const byName = new Map<string, RustTypeSchema>();
-  for (const type of types.filter((type) => required.has(type.name))) {
+  for (const type of selected.values()) {
     const existing = byName.get(type.name);
     if (existing && (JSON.stringify(existing.shape) !== JSON.stringify(type.shape) || existing.group !== type.group)) {
-      const groups = [existing.group, type.group].filter(Boolean).join(", ");
       throw new Error(
         `Ambiguous Rust type schema "${type.name}" referenced by ${ownerId}. ` +
-        `Candidates are declared in: ${groups}. Use a unique public ABI type name until path-aware type schema resolution is available.`,
+        `Candidates are: ${formatTypeCandidate(existing)}, ${formatTypeCandidate(type)}.`,
       );
     }
     byName.set(type.name, type);
@@ -70,6 +70,48 @@ function generateTypes(types: RustTypeSchema[], required: Set<string>, ownerId: 
   const names = new Set(byName.keys());
   const code = [...byName.values()].map((type) => generateNamedType(type, names)).join("");
   return { code, names };
+}
+
+/** Schema records carry source groups rather than relying on a globally unique
+ * short Rust name. Prefer the owning component's group, then reject a lookup
+ * that would cross source scopes ambiguously. */
+function resolveNamedType(types: RustTypeSchema[], reference: string, ownerGroup: string | null | undefined, ownerId: string): RustTypeSchema | undefined {
+  const name = reference.split("::").at(-1) ?? reference;
+  const candidates = types.filter((type) => type.name === name);
+  if (candidates.length === 0) return undefined;
+  const matches = reference.includes("::")
+    ? candidates.filter((type) => typeMatchesRustReference(type, reference))
+    : (() => {
+        const scoped = ownerGroup ? candidates.filter((type) => type.group === ownerGroup) : [];
+        return scoped.length > 0 ? scoped : candidates;
+      })();
+  if (matches.length === 0) return undefined;
+  const byIdentity = new Map<string, RustTypeSchema>();
+  for (const candidate of matches) {
+    const key = `${candidate.name}:${candidate.group ?? ""}:${JSON.stringify(candidate.shape)}`;
+    byIdentity.set(key, candidate);
+  }
+  if (byIdentity.size > 1) {
+    throw new Error(
+      `Ambiguous Rust type schema reference "${reference}" for ${ownerId}. ` +
+      `Candidates are: ${[...byIdentity.values()].map(formatTypeCandidate).join(", ")}.`,
+    );
+  }
+  return byIdentity.values().next().value;
+}
+
+function formatTypeCandidate(type: RustTypeSchema): string {
+  return `${type.id} (${type.group ?? "source group unavailable"})`;
+}
+
+function typeMatchesRustReference(type: RustTypeSchema, reference: string): boolean {
+  if (!type.group) return false;
+  const modulePath = reference.slice(0, -(type.name.length + 2)).replaceAll("::", "/");
+  const group = type.group.replaceAll("\\", "/");
+  return group === `${modulePath}.rs` ||
+    group === `${modulePath}/mod.rs` ||
+    group.endsWith(`/${modulePath}.rs`) ||
+    group.endsWith(`/${modulePath}/mod.rs`);
 }
 
 function generateNamedType(type: RustTypeSchema, names: ReadonlySet<string>): string {
@@ -107,7 +149,7 @@ function referencedTypeNamesFromType(type: string): string[] {
   const map = unwrapGeneric(normalized, "BTreeMap") ?? unwrapGeneric(normalized, "HashMap");
   if (map) return splitTopLevel(map).flatMap(referencedTypeNamesFromType);
   if (normalized.startsWith("(") && normalized.endsWith(")")) return splitTopLevel(normalized.slice(1, -1)).flatMap(referencedTypeNamesFromType);
-  return /^[A-Z][A-Za-z0-9_:]*$/.test(normalized) ? [normalized.split("::").at(-1) ?? normalized] : [];
+  return isNamedTypeReference(normalized) ? [normalized] : [];
 }
 
 export function generateRustStoreDeclaration(
@@ -120,7 +162,7 @@ export function generateRustStoreDeclaration(
   for (const type of [store.snapshot, ...store.actions.flatMap((action) => action.params.map((parameter) => parameter.type))]) {
     if (type) for (const referenced of referencedTypeNamesFromType(type)) required.add(referenced);
   }
-  const { code: typeCode, names } = generateTypes(types, required, store.id);
+  const { code: typeCode, names } = generateTypes(types, required, store.id, store.group);
   // A hand-written ToJs implementation may emit any JavaScript value, so a
   // missing schema cannot justify an object-shaped fallback.
   const snapshot = store.snapshot ? declarationType(store.snapshot, names) : "unknown";
@@ -172,7 +214,7 @@ function declarationType(type: string, names: ReadonlySet<string>): string {
   if (normalized.startsWith("(") && normalized.endsWith(")")) {
     return `[${splitTopLevel(normalized.slice(1, -1)).map((item) => declarationType(item, names)).join(", ")}]`;
   }
-  if (/^[A-Z][A-Za-z0-9_:]*$/.test(normalized)) {
+  if (isNamedTypeReference(normalized)) {
     const name = normalized.split("::").at(-1) ?? normalized;
     return names.has(name) ? name : "unknown";
   }
@@ -216,7 +258,7 @@ export function rustTypeToTypeScript(type: string): string {
     const items = splitTopLevel(normalized.slice(1, -1));
     return `[${items.map(rustTypeToTypeScript).join(", ")}]`;
   }
-  if (/^[A-Z][A-Za-z0-9_:]*$/.test(normalized)) return normalized.split("::").at(-1) ?? normalized;
+  if (isNamedTypeReference(normalized)) return normalized.split("::").at(-1) ?? normalized;
   throw new Error(`Unsupported Rust schema type "${type}".`);
 }
 
@@ -230,13 +272,17 @@ export function rustTypeToRuntimeType(type: string): "number" | "bigint" | "bool
   if (/^(?:i8|u8|i16|u16|i32|u32|isize|usize|f32|f64)$/.test(normalized)) return "number";
   if (/^(?:i64|u64|i128|u128)$/.test(normalized)) return "bigint";
   if (unwrapGeneric(normalized, "Vec") || (normalized.startsWith("(") && normalized.endsWith(")"))) return "array";
-  if (unwrapGeneric(normalized, "BTreeMap") || unwrapGeneric(normalized, "HashMap") || /^[A-Z][A-Za-z0-9_:]*$/.test(normalized)) return "object";
+  if (unwrapGeneric(normalized, "BTreeMap") || unwrapGeneric(normalized, "HashMap") || isNamedTypeReference(normalized)) return "object";
   throw new Error(`Unsupported Rust runtime type "${type}".`);
 }
 
 function unwrapGeneric(type: string, name: string): string | undefined {
   const prefix = `${name}<`;
   return type.startsWith(prefix) && type.endsWith(">") ? type.slice(prefix.length, -1) : undefined;
+}
+
+function isNamedTypeReference(type: string): boolean {
+  return /^(?:[A-Za-z_][A-Za-z0-9_]*::)*[A-Z][A-Za-z0-9_]*$/.test(type);
 }
 
 function splitTopLevel(value: string): string[] {
