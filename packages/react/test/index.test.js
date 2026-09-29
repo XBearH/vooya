@@ -5,7 +5,7 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { JSDOM } from "jsdom";
 
-import { defineVooyaComponent, useVooyaStore } from "../dist/index.js";
+import { defineVooyaComponent, defineVooyaStore, useVooyaStore } from "../dist/index.js";
 
 const dom = new JSDOM("<!doctype html><html><body></body></html>", {
   url: "http://localhost/",
@@ -299,3 +299,44 @@ async function renderComponentWithHandle(definition, props, createHandle) {
   await act(async () => root.render(createElement(Component, props)));
   return { Component, handle, updates, root };
 }
+
+
+test("a null initial snapshot becomes ready and generated actions remain usable", async () => {
+  let value = null;
+  let listener;
+  let disposed = 0;
+  const useSelection = defineVooyaStore({
+    name: "Selection",
+    actions: ["select", "clear"],
+    async create() {
+      return {
+        getSnapshot: () => value,
+        subscribe(next) { listener = next; return () => { listener = undefined; }; },
+        select() { value = 7; listener?.(); },
+        clear() { value = null; listener?.(); },
+        dispose() { disposed += 1; },
+      };
+    },
+  });
+  let consumed;
+  function Consumer() {
+    consumed = useSelection();
+    return createElement("span", null, consumed.state === undefined ? "loading" : String(consumed.state));
+  }
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  try {
+    await act(async () => root.render(createElement(Consumer)));
+    assert.equal(container.textContent, "null");
+    assert.equal(consumed.state, null);
+    await act(async () => consumed.select());
+    assert.equal(container.textContent, "7");
+    await act(async () => consumed.clear());
+    assert.equal(consumed.state, null);
+    assert.equal(container.textContent, "null");
+  } finally {
+    await act(async () => root.unmount());
+  }
+  assert.equal(listener, undefined);
+  assert.equal(disposed, 1);
+});

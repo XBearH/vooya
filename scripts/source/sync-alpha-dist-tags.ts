@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readReleaseModel } from "./release-model.js";
+import { readReleaseChannel, validateReleaseVersion } from "./release-channel.js";
 
 const args = process.argv.slice(2);
 const flags = new Set<string>();
@@ -11,18 +12,20 @@ for (let i = 0; i < args.length; i++) {
   if (["--root", "--capture-latest", "--latest-before"].includes(args[i])) {
     if (!args[i + 1] || args[i + 1].startsWith("--") || values.has(args[i])) throw new Error(`Missing or duplicate value for ${args[i]}.`);
     values.set(args[i], args[++i]);
-  } else if (["--dry-run", "--check", "--check-published"].includes(args[i]) && !flags.has(args[i])) flags.add(args[i]);
+  } else if (["--dry-run", "--check", "--check-published", "--check-baseline"].includes(args[i]) && !flags.has(args[i])) flags.add(args[i]);
   else throw new Error(`Unknown or duplicate option ${args[i]}.`);
 }
 if (flags.size + Number(values.has("--capture-latest")) > 1) throw new Error("Choose only one release verification mode.");
-if (values.has("--latest-before") && !flags.has("--check")) throw new Error("--latest-before requires --check.");
+if (values.has("--latest-before") && !flags.has("--check") && !flags.has("--check-baseline")) throw new Error("--latest-before requires --check or --check-baseline.");
 const root = values.has("--root") ? resolve(values.get("--root")) : fileURLToPath(new URL("../..", import.meta.url));
+if (flags.has("--check-baseline") && !values.has("--latest-before")) throw new Error("--check-baseline requires --latest-before.");
+const channel = readReleaseChannel(root);
 const { packages, byName } = readReleaseModel(root);
 for (const { manifest } of packages) {
-  if (!/-alpha\.\d+$/.test(manifest.version)) throw new Error(`Refusing to tag non-alpha version ${manifest.name}@${manifest.version} as alpha.`);
+  if (!flags.has("--check-published") && !validateReleaseVersion(manifest.version, channel)) throw new Error(`Refusing to tag version ${manifest.name}@${manifest.version} as ${channel}.`);
 }
 if (flags.has("--dry-run")) {
-  for (const { manifest } of packages) console.log(`Would verify ${manifest.name}@${manifest.version}, then set alpha -> ${manifest.version}`);
+  for (const { manifest } of packages) console.log(`Would verify ${manifest.name}@${manifest.version}, then set ${channel} -> ${manifest.version}`);
 } else {
   // Read every package before mutating any tag. Preflight permits new packages;
   // exact post-publish verification never treats an absent version as success.
@@ -39,15 +42,19 @@ if (flags.has("--dry-run")) {
       if (metadata.get(entry.name)?.versions?.[entry.version]) throw new Error(`Cannot capture a new latest baseline: ${entry.name}@${entry.version} is already published. Restore the original latest-before.json artifact for this release SHA.`);
     }
     const latest = Object.fromEntries(packages.map(({ manifest }) => [manifest.name, metadata.get(manifest.name)?.["dist-tags"]?.latest ?? null]));
-    writeFileSync(resolve(values.get("--capture-latest")), `${JSON.stringify({ latest }, null, 2)}\n`, { flag: "wx" });
+    const alpha = channel === "beta" ? Object.fromEntries(packages.map(({ manifest }) => [manifest.name, metadata.get(manifest.name)?.["dist-tags"]?.alpha ?? null])) : undefined;
+    writeFileSync(resolve(values.get("--capture-latest")), `${JSON.stringify({ channel, latest, ...(alpha ? { alpha } : {}) }, null, 2)}\n`, { flag: "wx" });
     console.log("Captured npm latest tags before publication.");
+  } else if (flags.has("--check-baseline")) {
+    verifyBaseline(metadata);
+    console.log("Verified protected tag baseline before publication.");
   } else if (flags.has("--check-published")) {
     for (const { manifest } of packages) {
       const published = metadata.get(manifest.name);
-      const tag = published?.["dist-tags"]?.alpha;
-      if (published && (!/-alpha\.\d+$/.test(String(tag)) || !published.versions?.[tag])) throw new Error(`Invalid published alpha tag for ${manifest.name}.`);
+      const tag = published?.["dist-tags"]?.[channel];
+      if (((channel === "alpha" && published) || tag !== undefined) && (!validateReleaseVersion(tag, channel) || !published?.versions?.[tag])) throw new Error(`Invalid published ${channel} tag for ${manifest.name}.`);
     }
-    console.log("Preflight checked existing alpha metadata; this does not verify a new publication.");
+    console.log(`Preflight checked existing ${channel} metadata; this does not verify a new publication.`);
   } else {
     for (const { manifest } of packages) {
       const published = metadata.get(manifest.name);
@@ -59,23 +66,17 @@ if (flags.has("--dry-run")) {
           if (byName.has(name) && exact[field]?.[name] !== manifest[field]?.[name]) throw new Error(`Published ${manifest.name} has incorrect ${field}.${name}.`);
         }
       }
-      if (flags.has("--check") && published["dist-tags"]?.alpha !== manifest.version) throw new Error(`npm alpha dist-tag for ${manifest.name} must be ${manifest.version}, found ${published["dist-tags"]?.alpha}.`);
+      if (flags.has("--check") && published["dist-tags"]?.[channel] !== manifest.version) throw new Error(`npm ${channel} dist-tag for ${manifest.name} must be ${manifest.version}, found ${published["dist-tags"]?.[channel]}.`);
     }
-    if (values.has("--latest-before")) {
-      const before = JSON.parse(readFileSync(resolve(values.get("--latest-before")), "utf8"));
-      for (const { manifest } of packages) {
-        if (!Object.hasOwn(before.latest ?? {}, manifest.name)) throw new Error(`Latest snapshot is missing ${manifest.name}.`);
-        if (before.latest[manifest.name] !== (metadata.get(manifest.name)?.["dist-tags"]?.latest ?? null)) throw new Error(`npm latest changed during alpha publication for ${manifest.name}. Restore the recorded tag before completing the release.`);
-      }
-    }
+    if (values.has("--latest-before")) verifyBaseline(metadata);
     if (!flags.has("--check")) {
       for (const { manifest } of packages) {
-        const result = spawnSync(process.platform === "win32" ? "npm.cmd" : "npm", ["dist-tag", "add", `${manifest.name}@${manifest.version}`, "alpha"], { cwd: root, stdio: "inherit" });
+        const result = spawnSync(process.platform === "win32" ? "npm.cmd" : "npm", ["dist-tag", "add", `${manifest.name}@${manifest.version}`, channel], { cwd: root, stdio: "inherit" });
         if (result.error) throw result.error;
         if (result.status !== 0) throw new Error(`npm dist-tag add failed for ${manifest.name}; retry after fixing the cause.`);
       }
     }
-    console.log(flags.has("--check") ? "Verified exact published versions, internal dependencies, and alpha tags." : "Synchronized alpha tags; run --check for final verification.");
+    console.log(flags.has("--check") ? `Verified exact published versions, internal dependencies, and ${channel} tags.` : `Synchronized ${channel} tags; run --check for final verification.`);
   }
 }
 
@@ -90,4 +91,15 @@ async function readMetadata(name: string) {
   if (response.status === 404) return undefined;
   if (!response.ok) throw new Error(`npm registry request for ${name} failed with HTTP ${response.status}.`);
   return response.json();
+}
+
+function verifyBaseline(metadata: Map<string, any>) {
+  const before = JSON.parse(readFileSync(resolve(values.get("--latest-before")), "utf8"));
+  if (before.channel !== channel && !(channel === "alpha" && before.channel === undefined)) throw new Error("Protected tag snapshot channel does not match this release.");
+  for (const tag of channel === "beta" ? ["latest", "alpha"] : ["latest"]) {
+    for (const { manifest } of packages) {
+      if (!Object.hasOwn(before[tag] ?? {}, manifest.name)) throw new Error(`Protected ${tag} snapshot is missing ${manifest.name}.`);
+      if (before[tag][manifest.name] !== (metadata.get(manifest.name)?.["dist-tags"]?.[tag] ?? null)) throw new Error(`npm ${tag} changed during ${channel} publication for ${manifest.name}. Restore the recorded tag before completing the release.`);
+    }
+  }
 }

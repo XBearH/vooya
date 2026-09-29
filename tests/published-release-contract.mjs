@@ -42,6 +42,7 @@ try {
   }
   writeFileSync(resolve(fixture, ".changeset/config.json"), JSON.stringify({ access: "public", changelog: "@changesets/cli/changelog", fixed: [], linked: [], ignore: [] }));
   writeFileSync(resolve(fixture, ".changeset/release.json"), JSON.stringify({ packages: [manifests[0]] }));
+  writeFileSync(resolve(fixture, ".changeset/pre.json"), JSON.stringify({ mode: "pre", tag: "alpha" }));
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
 
@@ -94,7 +95,7 @@ try {
   await fails("an existing baseline cannot be overwritten", ["--capture-latest", snapshot], /EEXIST/);
   resetRegistry();
   assert.deepEqual(JSON.parse(readFileSync(snapshot, "utf8")), {
-    latest: { "@vooya/build-core": "0.0.1", "@vooya/core": "0.0.1", "@vooya/vite": "0.0.1" },
+    channel: "alpha", latest: { "@vooya/build-core": "0.0.1", "@vooya/core": "0.0.1", "@vooya/vite": "0.0.1" },
   });
   await succeeds("latest is unchanged", ["--check", "--latest-before", snapshot]);
   metadata.get("@vooya/core")["dist-tags"].latest = "0.1.0-alpha.11";
@@ -103,7 +104,53 @@ try {
   resetRegistry();
   await fails("unknown flags fail closed", ["--check", "--not-a-mode"], /Unknown or duplicate option --not-a-mode/);
   assert.equal(requests.length, 0, "Invalid options must fail before querying npm.");
-  console.log("Published release contract passed: independent versions, exact dependencies, alpha tags, missing versions, 404 preflight, latest snapshots, and CLI guards.");
+  // Preparation is read-only: beta may be configured while manifests are
+  // still alpha, and npm may not have any beta dist-tags yet.
+  writeFileSync(resolve(fixture, ".changeset/pre.json"), JSON.stringify({ mode: "pre", tag: "beta" }));
+  resetRegistry();
+  await succeeds("first beta preflight accepts alpha-only registry", ["--check-published"]);
+  await fails("beta tagging rejects alpha manifests", ["--dry-run"], /Refusing to tag/);
+  const betaVersions = new Map(manifests.map((manifest, index) => [manifest.name, `0.1.0-beta.${index}`]));
+  for (const manifest of manifests) {
+    manifest.version = betaVersions.get(manifest.name);
+    for (const field of ["dependencies", "optionalDependencies"]) for (const name of Object.keys(manifest[field] ?? {})) {
+      if (betaVersions.has(name)) manifest[field][name] = betaVersions.get(name);
+    }
+    writeFileSync(resolve(fixture, "packages", manifest.name.slice(7), "package.json"), JSON.stringify(manifest));
+  }
+  writeFileSync(resolve(fixture, ".changeset/release.json"), JSON.stringify({ packages: manifests.slice(0, 2) }));
+  const resetBeta = () => {
+    resetRegistry();
+    for (const manifest of manifests) Object.assign(metadata.get(manifest.name)["dist-tags"], { beta: manifest.version, alpha: "0.1.0-alpha.1" });
+  };
+  resetBeta();
+  await succeeds("beta exact metadata and tags", ["--check"]);
+  await succeeds("beta dry-run targets beta only", ["--dry-run"], /then set beta -> 0\.1\.0-beta/);
+  const betaSnapshot = resolve(fixture, "beta-before.json");
+  delete metadata.get(manifests[0].name).versions[manifests[0].version];
+  await fails("partial beta cannot reconstruct its baseline", ["--capture-latest", betaSnapshot], /already published/);
+  delete metadata.get(manifests[1].name).versions[manifests[1].version];
+  await succeeds("new beta captures latest and alpha", ["--capture-latest", betaSnapshot]);
+  const betaBefore = JSON.parse(readFileSync(betaSnapshot, "utf8"));
+  assert.equal(betaBefore.channel, "beta");
+  assert.deepEqual(betaBefore.alpha, Object.fromEntries(manifests.map(({ name }) => [name, "0.1.0-alpha.1"])));
+  resetBeta();
+  await succeeds("retry validates original protected tags before mutation", ["--check-baseline", "--latest-before", betaSnapshot]);
+  await succeeds("beta completion preserves both protected tags", ["--check", "--latest-before", betaSnapshot]);
+  metadata.get("@vooya/core")["dist-tags"].alpha = "0.1.0-beta.0";
+  await fails("beta cannot move alpha", ["--check", "--latest-before", betaSnapshot], /alpha changed during beta/);
+  await fails("retry detects changed alpha before publishing", ["--check-baseline", "--latest-before", betaSnapshot], /alpha changed during beta/);
+  resetBeta();
+  metadata.get("@vooya/core")["dist-tags"].latest = "0.1.0-beta.0";
+  await fails("beta cannot move latest", ["--check", "--latest-before", betaSnapshot], /latest changed during beta/);
+  resetBeta();
+  await fails("alpha-only baseline cannot authorize beta", ["--check-baseline", "--latest-before", snapshot], /snapshot channel/);
+  delete betaBefore.alpha["@vooya/core"];
+  writeFileSync(betaSnapshot, JSON.stringify(betaBefore));
+  await fails("beta baseline must include every alpha tag", ["--check-baseline", "--latest-before", betaSnapshot], /alpha snapshot is missing/);
+  metadata.get("@vooya/vite")["dist-tags"].beta = "0.2.0-beta.0";
+  await fails("beta preflight rejects another release line", ["--check-published"], /Invalid published beta/);
+  console.log("Published release contract passed: independent versions, exact dependencies, alpha tags, missing versions, 404 preflight, latest/alpha protected snapshots, alpha/beta retries, and CLI guards.");
 } finally {
   server.closeAllConnections();
   if (server.listening) await new Promise((done) => server.close(done));
@@ -139,7 +186,7 @@ async function fails(description, args, expected) {
 }
 
 async function run(args) {
-  assert(args.some((argument) => ["--check", "--check-published", "--capture-latest", "--dry-run"].includes(argument)), "Every invocation must select a non-mutating mode.");
+  assert(args.some((argument) => ["--check", "--check-published", "--check-baseline", "--capture-latest", "--dry-run"].includes(argument)), "Every invocation must select a non-mutating mode.");
   const env = { ...process.env, NPM_CONFIG_REGISTRY: `http://127.0.0.1:${server.address().port}/` };
   // Even a regression into the default mutation path cannot launch a real npm.
   for (const name of Object.keys(env)) if (name.toLowerCase() === "path") delete env[name];

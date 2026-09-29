@@ -41,6 +41,12 @@ event forwarding, and diagnostic mappings.
 > Rust/WASM toolchain.
 > Published alpha APIs may still change.
 
+The next release is being prepared as `0.1.0-beta.0`; this preparation does not
+mean a beta has been published. The installation examples below continue to use
+the published `alpha` channel. The first beta will coordinate all ten packages;
+subsequent releases retain independent package versions and exact internal
+dependencies. See the [release guide](docs/maintainers/releases.md).
+
 ## Why Vooya?
 
 Rust already has strong libraries for parsing, graphics, simulation, search,
@@ -411,7 +417,7 @@ Current boundaries:
 - Webpack 5 support is experimental; Webpack 4, Turbopack, Rollup, SSR, and
   hydration are not supported;
 - successful Rust HMR currently performs a full reload and loses local state;
-- component contracts are intentionally limited and will evolve during alpha;
+- component contracts are intentionally limited and may change during prereleases;
 - the precompiled artifact path is not yet a published component product.
 
 See the [project status](docs/project/status.md) and
@@ -446,9 +452,9 @@ npm run dev:trace     # trace-waterfall interaction case
 
 Repository development also requires the Rust target and pinned wasm-bindgen
 CLI shown in the quick start above. Maintainer release tooling uses Changesets
-3.0.3 and needs Node.js 22.11 or newer on a supported LTS line and npm 10.9 or
-newer; Node.js 24 is recommended for repository work. The consumer requirements
-in the quick start remain unchanged.
+3.0.3. Use the CI Node.js 22/npm 10.9.x combination when updating the lockfile or
+preparing releases; see the [release guide](docs/maintainers/releases.md).
+The consumer requirements in the quick start remain unchanged.
 
 ## Packages
 
@@ -468,7 +474,7 @@ in the quick start remain unchanged.
 Public packages are versioned independently with exact internal dependencies. Install the framework
 adapter and selected bundler integration from the same `alpha` channel.
 Changesets generates per-package changelogs through a release PR. The **Release**
-workflow publishes reviewed alpha versions and creates per-package
+workflow publishes reviewed prerelease versions and creates per-package
 [GitHub Releases](https://github.com/vooyajs/vooya/releases). See the
 [maintainer release guide](docs/maintainers/releases.md) for the complete gate
 and registry verification.

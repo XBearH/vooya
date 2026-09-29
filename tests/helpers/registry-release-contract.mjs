@@ -1,3 +1,6 @@
+import { isAbsolute, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
 export const registryPackages = ["compiler", "core", "build-core", "vite", "vue", "react"];
 
 const dependencyFields = ["dependencies", "optionalDependencies", "peerDependencies"];
@@ -21,12 +24,9 @@ function isRegistryUrl(value) {
 // A release snapshot may intentionally contain several package versions. Its
 // invariant is that each published internal dependency points into this snapshot.
 export function verifyRegistrySnapshot(snapshot, tag, expectedManifests) {
-  const versions = {};
-  for (const shortName of registryPackages) {
-    const name = `@vooya/${shortName}`;
-    const manifest = snapshot[name];
-    if (!manifest || manifest.name !== name || !exactVersion.test(manifest.version ?? "")) {
-      throw new Error(`Registry snapshot is missing a valid manifest for ${name}.`);
+  return verifySnapshot(snapshot, expectedManifests, (manifest, name) => {
+    if (tag === "beta" && !/^0\.1\.0-beta\.(0|[1-9]\d*)$/.test(manifest.version)) {
+      throw new Error(`Registry ${name}@${manifest.version} is not a 0.1.0 beta release.`);
     }
     if (manifest["dist-tags"]?.[tag] !== manifest.version) {
       throw new Error(`Registry ${name}@${manifest.version} does not match dist-tag ${JSON.stringify(tag)}.`);
@@ -34,6 +34,27 @@ export function verifyRegistrySnapshot(snapshot, tag, expectedManifests) {
     if (!isRegistryUrl(manifest.dist?.tarball)) {
       throw new Error(`Registry ${name} has a non-registry tarball: ${manifest.dist?.tarball ?? "missing"}.`);
     }
+  });
+}
+
+export function verifyPackedSnapshot(snapshot, expectedManifests) {
+  if (!expectedManifests) throw new Error("Packed verification requires expected candidate manifests.");
+  return verifySnapshot(snapshot, expectedManifests, (manifest, name) => {
+    if (!isAbsolute(manifest.packedPath ?? "") || !/^sha512-[A-Za-z0-9+/]+={0,2}$/.test(manifest.dist?.integrity ?? "")) {
+      throw new Error(`Packed ${name} is missing its tarball path or integrity.`);
+    }
+  });
+}
+
+function verifySnapshot(snapshot, expectedManifests, verifySource) {
+  const versions = {};
+  for (const shortName of registryPackages) {
+    const name = `@vooya/${shortName}`;
+    const manifest = snapshot[name];
+    if (!manifest || manifest.name !== name || !exactVersion.test(manifest.version ?? "")) {
+      throw new Error(`Registry snapshot is missing a valid manifest for ${name}.`);
+    }
+    verifySource(manifest, name);
     versions[shortName] = manifest.version;
     for (const field of dependencyFields) {
       for (const [dependency, version] of Object.entries(internalDependencies(manifest, field))) {
@@ -58,6 +79,23 @@ export function verifyRegistrySnapshot(snapshot, tag, expectedManifests) {
 }
 
 export function verifyRegistryLockfile(lockfile, framework, snapshot) {
+  return verifyLockfile(lockfile, framework, snapshot, (entry, manifest) =>
+    !entry.link && isRegistryUrl(entry.resolved) && entry.resolved === manifest.dist?.tarball
+      && (!manifest.dist.integrity || entry.integrity === manifest.dist.integrity), "snapshot npm tarball");
+}
+
+export function verifyPackedLockfile(lockfile, framework, snapshot, projectRoot) {
+  return verifyLockfile(lockfile, framework, snapshot, (entry, manifest) => {
+    if (entry.link || typeof entry.resolved !== "string" || !entry.resolved.startsWith("file:")) return false;
+    let path;
+    try {
+      path = entry.resolved.startsWith("file://") ? fileURLToPath(entry.resolved) : resolve(projectRoot, entry.resolved.slice(5));
+    } catch { return false; }
+    return path === manifest.packedPath && entry.integrity === manifest.dist.integrity;
+  }, "candidate tarball and integrity");
+}
+
+function verifyLockfile(lockfile, framework, snapshot, verifySource, description) {
   const required = new Set(["compiler", "core", "build-core", "vite", framework].map((name) => `@vooya/${name}`));
   for (const [path, entry] of Object.entries(lockfile.packages ?? {})) {
     const match = path.match(/(?:^|\/)node_modules\/(@vooya\/[^/]+)$/);
@@ -67,8 +105,8 @@ export function verifyRegistryLockfile(lockfile, framework, snapshot) {
     if (!manifest || entry.version !== manifest.version) {
       throw new Error(`Registry ${framework} consumer resolved ${name}@${entry.version ?? "missing"} at ${path}, expected snapshot ${manifest?.version ?? "missing"}.`);
     }
-    if (entry.link || !isRegistryUrl(entry.resolved) || entry.resolved !== manifest.dist?.tarball) {
-      throw new Error(`Registry ${framework} consumer did not lock ${name} to its snapshot npm tarball: ${entry.resolved ?? "missing resolution"}.`);
+    if (!verifySource(entry, manifest)) {
+      throw new Error(`Registry ${framework} consumer did not lock ${name} to its ${description}: ${entry.resolved ?? "missing resolution"}.`);
     }
     required.delete(name);
   }
@@ -78,19 +116,26 @@ export function verifyRegistryLockfile(lockfile, framework, snapshot) {
 }
 
 export function parseRegistryArguments(args, env = {}) {
-  let expectedRoot = env.VOOYA_REGISTRY_EXPECTED_ROOT;
-  let explicitRoot = false;
+  const result = {
+    expectedRoot: env.VOOYA_REGISTRY_EXPECTED_ROOT,
+    packDir: undefined,
+    tag: env.VOOYA_REGISTRY_TAG ?? "alpha",
+  };
+  const names = { "--expected-root": "expectedRoot", "--pack-dir": "packDir", "--tag": "tag" };
+  const seen = new Set();
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
-    if (argument !== "--expected-root" && !argument.startsWith("--expected-root=")) {
-      throw new Error(`Unknown registry consumer argument: ${argument}.`);
-    }
-    const value = argument === "--expected-root" ? args[++index] : argument.slice("--expected-root=".length);
-    if (!value || value.startsWith("--") || explicitRoot) {
-      throw new Error("--expected-root requires one candidate repository path.");
-    }
-    expectedRoot = value;
-    explicitRoot = true;
+    const separator = argument.indexOf("=");
+    const name = separator < 0 ? argument : argument.slice(0, separator);
+    if (!Object.hasOwn(names, name)) throw new Error(`Unknown registry consumer argument: ${argument}.`);
+    const value = separator < 0 ? args[++index] : argument.slice(separator + 1);
+    if (!value || value.startsWith("--") || seen.has(name)) throw new Error(`${name} requires one value.`);
+    result[names[name]] = value;
+    seen.add(name);
   }
-  return { expectedRoot };
+  if (!["alpha", "beta"].includes(result.tag)) throw new Error("Registry consumer --tag must be alpha or beta.");
+  if ((result.packDir || result.tag === "beta") && !result.expectedRoot) {
+    throw new Error("Packed and beta verification require --expected-root for exact candidate comparison.");
+  }
+  return result;
 }

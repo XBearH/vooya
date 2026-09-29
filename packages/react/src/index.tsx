@@ -238,7 +238,8 @@ export function useVooyaStore<
   }, []);
   const getSnapshot = useCallback(() => {
     const store = storeRef.current;
-    return store?.getSnapshot() ?? store?.snapshot?.();
+    // A null snapshot is a ready Rust Option::None, not a missing method.
+    return store?.getSnapshot();
   }, []);
 
   const state = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);

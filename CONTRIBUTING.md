@@ -26,7 +26,8 @@ or [`help wanted`](https://github.com/vooyajs/vooya/labels/help%20wanted).
 You need:
 
 - a supported Node.js LTS release, preferably Node.js 24;
-- npm `>=10.9.0`;
+- npm `>=10.9.0` (use the CI Node.js 22/npm 10.9.x combination when updating
+  dependencies or preparing a release lockfile; see [release guidance](docs/maintainers/releases.md));
 - a stable Rust toolchain managed by [rustup](https://rustup.rs/);
 - the `wasm32-unknown-unknown` target; and
 - `wasm-bindgen-cli` `0.2.115` for the current alpha.

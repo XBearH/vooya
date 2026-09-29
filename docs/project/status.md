@@ -4,6 +4,12 @@ Vooya is a public alpha and an architecture-validation project. It is not a
 stable compiler or a production compatibility promise. Use each package's npm `alpha` tag to resolve its latest published version.
 The main branch may include changes queued for a later prerelease.
 
+The next release is being prepared as `0.1.0-beta.0`; it is not yet a published
+beta. Its first version plan includes all ten public packages, then later beta
+releases return to package-scoped changesets and independent versions. This
+preparation neither publishes packages nor expands the compatibility claims
+below. Installation examples continue to use the published `alpha` channel.
+
 The ten public packages share one release workflow:
 
 - `@vooya/compiler`
@@ -24,10 +30,11 @@ same version. Release checks verify the complete dependency graph.
 Changesets 3.0.3 manages independent package versions and changelogs, with no
 fixed or linked version groups. Published source and dependency changes carry
 package-scoped release notes. The **Release** workflow prepares a release PR
-on `main`; merging that PR runs the full gate and publishes alpha packages,
+on `main`; merging that PR runs the full gate and publishes the reviewed
+prerelease channel,
 followed by exact registry checks and per-package GitHub Releases. The receipt
 records the tested commit and verified package set. This automation does not
-promote an alpha to a stable release or expand the compatibility claims below.
+promote a prerelease to stable or expand the compatibility claims below.
 See [the release guide](../maintainers/releases.md).
 
 ## Working today
@@ -122,12 +129,20 @@ See [the release guide](../maintainers/releases.md).
   the first Cargo on `PATH`.
 - SSR, hydration, slots, SvelteKit integration, and standalone application
   rendering are out of the current evidence boundary.
-- Alpha ABI revisions can be breaking.
+- Prerelease ABI revisions can be breaking.
 - The default CI browser evidence is a small Chromium smoke suite plus the
   bundler integration fixtures. Extended DataGrid, scatter, trace, and Firefox
   checks remain available through explicit manual commands.
 
 ## Next milestones
+
+Beta preparation requires clean Rust-file Vue and React consumers to pass
+strict TypeScript checks and Chromium interaction with locally packed artifacts
+before publication, and with exact registry versions afterward. These are
+separate acceptance steps; local evidence cannot prove a registry publication.
+Managed toolchain installation through `@vooya/preset` remains a separate
+`0.2` workstream in [#129](https://github.com/vooyajs/vooya/issues/129), not a
+prerequisite for this beta. Source consumers still need the Rust/WASM toolchain.
 
 1. Extend the Rust view layer from explicit `Signal::get()` text bindings into
    full declarative trees, keyed updates, and broader effect cleanup.

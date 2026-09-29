@@ -5,10 +5,27 @@ per-package changelogs. Public packages are independently versioned:
 `.changeset/config.json` keeps `fixed` and `linked` empty. Do not hand-edit
 versions or generated changelogs.
 
-Maintainer tooling requires Node.js `^22.11.0 || ^24.0.0 || >=26.0.0` and npm
-`>=10.9.0`; Node.js 24 is recommended. Vite examples require at least Node.js
-22.12 on the Node.js 22 line. This does not change the published packages'
-Node.js 20 consumer compatibility.
+The current preparation targets the first `0.1.0-beta.0` release. A one-time
+changeset names all ten public packages and `.changeset/pre.json` selects
+`beta`. Changesets 3 carries each alpha version's numeric prerelease counter
+into a new tag, so changing `pre.json` alone does not produce `beta.0`.
+`version:packages` uses the pinned official release-plan assembler, verifies
+that every public package starts at `0.1.0-alpha.N` and is included in the
+`0.1.0-beta.N` plan, then normalizes that plan's versions to `0.1.0-beta.0`.
+The official applier still writes package versions, dependency pins, changelogs,
+and consumed-entry archives. Incomplete or mixed first-beta cohorts fail before
+application; later beta version operations use the unmodified Changesets CLI.
+`fixed` and `linked` remain empty, so later beta changes are
+versioned independently. Preparing or pushing this source change does not
+publish beta or replace the published alpha installation path. Versioning and
+publication remain separate reviewed steps.
+
+Use Node.js 22.12 or newer on the 22.x line with npm 10.9.x for release
+preparation, matching the release workflow. The current rehearsal uses Node.js
+22.23.2 and npm 10.9.8. Although Changesets also supports newer Node versions,
+npm 11 currently rewrites optional peer entries differently from the CI npm 10
+lockfile; do not regenerate release lockfiles with npm 11. This does not change
+the published packages' Node.js 20 consumer compatibility.
 
 ## Contributor changes
 
@@ -102,7 +119,7 @@ gh pr create --base main --head codex/release-packages --title 'chore: release p
 
 A PR created with the maintainer's normal GitHub credentials triggers ordinary
 PR checks. Wait for those checks and review before merging. These commands do
-not publish; merging this version PR still enters the normal alpha publishing
+not publish; merging this version PR still enters the normal prerelease publishing
 job and its complete release gate. The manual route does not grant permission
 to skip verification or publish stable versions.
 
@@ -115,6 +132,8 @@ npm run version:packages
 
 The version command edits files but does not publish. Keep the generated
 output reviewable; do not manually force every package to the same version.
+The initial beta's coordinated versions come from its all-package changeset,
+not manual edits or permanent version grouping.
 Changesets 3 moves consumed prerelease entries into `.changeset/pre/`, where
 they remain available for the eventual stable changelog. They are not pending
 changesets and must not be treated as a reason to republish a package.
@@ -128,31 +147,38 @@ declaration fixes from [#122](https://github.com/vooyajs/vooya/pull/122) and
 from [#108](https://github.com/vooyajs/vooya/pull/108); it does not invent
 changesets for already published history.
 
-## Publish alpha
+## Publish alpha or beta
 
 Merging the reviewed release PR triggers the **Release** workflow on `main`.
 Its separate publishing job runs only when that commit changes the generated
 `.changeset/release.json` and no pending changesets remain. Ordinary source
 merges prepare a release PR instead of publishing directly.
 
-The publishing command is `npm run release:alpha`. That command writes to npm;
-`release:status` and `version:packages` do not publish. The command accepts
-alpha versions only.
+Use `npm run release:beta` for the beta channel or `npm run release:alpha` for
+alpha. Both commands write to npm and explicitly guard the selected channel
+against `.changeset/pre.json` and the candidate versions. They cannot publish
+stable versions. `release:status` and `version:packages` do not publish.
+Do not invoke a publishing command as part of preparing or pushing the beta
+changes; publication follows a separately reviewed version PR.
 
 Publication uses the same commit that passes the complete release gate:
 
 1. Require a clean release checkout and no pending changesets.
 2. Run `verify:release`, including browser and bundler acceptance, build the
    packages, and recheck the commit and checkout before publication.
-3. Capture the existing npm `latest` tags as the retry baseline.
+3. Capture the existing npm `latest` tags as the retry baseline; beta also
+   captures the existing `alpha` tags. Verify this baseline before publishing.
 4. Use the Changesets publish plan, pack, and publish commands for only the
-   recorded candidates, forcing the `alpha` tag. Publish packed artifacts with
+   recorded candidates, forcing the selected `alpha` or `beta` tag. Publish packed artifacts with
    Git tagging disabled, skipping exact versions already present on npm.
 5. Verify each expected registry version and its exact internal dependencies,
-   synchronize and check its `alpha` tag, and preserve the original `latest`
-   baseline. Registry propagation checks use bounded retries.
-6. Install clean Vue and React consumers from the registry and verify their
-   resolved versions and dependency graph against the release checkout.
+   synchronize and check the selected channel tag, and verify that `latest`
+   remains at the original baseline. Beta must also leave `alpha` unchanged. Registry propagation checks use bounded retries.
+6. Install clean Rust-file Vue and React consumers from the registry and
+   verify their exact resolved versions and dependency graph against the
+   release checkout. Require strict TypeScript checks, production builds, and
+   Chromium interaction. Run the corresponding clean, locally packed consumer
+   acceptance before publication; it does not replace registry acceptance.
 7. Save a commit-linked receipt and package notes under
    `.vooya-tools/release/<commit>/`. CI retains this evidence, including the
    original tag baseline, on failure as well as success.
@@ -160,26 +186,30 @@ Publication uses the same commit that passes the complete release gate:
 Only after registry and consumer acceptance succeeds does the workflow create
 each candidate package's GitHub Release from its generated changelog section
 and package-version Git tag. This step is idempotent: a retry can create a
-missing announcement even if npm already has that candidate version. Alpha
-GitHub Releases are marked as prereleases. The verified receipt also
+missing announcement even if npm already has that candidate version. Alpha and
+beta GitHub Releases are marked as prereleases. The verified receipt also
 includes unchanged packages; it must not be interpreted as a list of packages
 newly published in that run.
 
 Registry preflight is not publication proof. Post-publication checks require
-the exact expected versions and tags; missing packages fail. Registry source
-consumer builds and packed browser tests are separate evidence: installing a
-registry package does not by itself prove browser behavior.
+the exact expected versions and tags; missing packages fail. Local packed acceptance and registry acceptance are separate evidence:
+installing a registry package does not by itself prove type or browser behavior.
 
 ## Recover partial publication
 
 Keep the same release commit and exact versions. Inspect the failed step; do
-not bump versions again, unpublish successful packages, or move `latest` to
-hide a partial release. Fix the failed prerequisite and rerun the workflow.
+not bump versions again, unpublish successful packages, or move protected tags
+to hide a partial release. Beta retries preserve both `latest` and `alpha`. Fix the failed prerequisite and rerun the workflow.
 If the original `latest-before.json` baseline is missing and any candidate version
 already exists on npm, fresh baseline capture fails closed, even in a new manual
 workflow run. Restore the baseline from that release SHA’s uploaded artifact
 before retrying; an existing baseline is never overwritten.
 Changesets skips already published npm versions and publishes the missing set.
+
+The baseline filename remains `latest-before.json`. For beta it contains
+`channel: "beta"`, a `latest` map, and an `alpha` map keyed by package name;
+missing tags are recorded as `null`. Keep the entire original file when
+recovering a beta run, not only its `latest` field.
 
 A local retry retains its original `latest-before.json`. CI restores the
 baseline using a key for the exact release commit and saves it before any npm
@@ -197,10 +227,17 @@ rechecks registry acceptance and creates missing announcements without
 republishing existing npm versions. Do not create a new version merely to
 recreate an announcement.
 
-## Beta and stable
+## Stable and later toolchain work
 
-This workflow retains the alpha publication boundary. Moving to beta or the
-first stable `0.1.0` requires a separate review of the prerelease state,
-publication command, dist-tag checks, and transition tests. Exiting Changesets
-prerelease mode alone does not authorize publication through `latest`.
-The current alpha publishing command deliberately rejects stable versions.
+The workflow supports reviewed alpha and beta candidates while preserving
+`latest`; beta also preserves the alpha channel. The first stable `0.1.0`
+requires a separate review of prerelease exit, the publication command, dist-tag
+policy, and transition tests. Exiting Changesets prerelease mode alone does not
+authorize publication through `latest`. Both prerelease publishing commands
+reject stable versions.
+
+Beta does not promise automatic Rust installation or broader framework support.
+The managed `@vooya/preset` toolchain is tracked separately for `0.2` in
+[#129](https://github.com/vooyajs/vooya/issues/129); it is not a beta release gate.
+Keep source toolchain requirements and the current compatibility matrix in the
+beta documentation.

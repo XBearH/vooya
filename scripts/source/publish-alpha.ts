@@ -4,17 +4,21 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { alphaPublishPlan, type ReleaseCandidate } from "./alpha-publish-plan.js";
+import { readReleaseChannel, validateReleaseVersion } from "./release-channel.js";
 import { readChangesets, readReleaseModel } from "./release-model.js";
 
-if (process.argv.length !== 2) throw new Error("publish-alpha accepts no flags; it always runs the full release gate.");
+const args = process.argv.slice(2);
+if (args.length && (args.length !== 2 || args[0] !== "--channel" || !["alpha", "beta"].includes(args[1]))) throw new Error("Usage: publish-alpha [--channel alpha|beta]; the full release gate always runs.");
 const root = fileURLToPath(new URL("../..", import.meta.url));
+const channel = readReleaseChannel(root);
+if (args.length && args[1] !== channel) throw new Error(`Requested ${args[1]} publication but Changesets is configured for ${channel}.`);
 const git = (...args: string[]) => execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
 const sha = git("rev-parse", "HEAD");
 const candidates: ReleaseCandidate[] = JSON.parse(readFileSync(resolve(root, ".changeset/release.json"), "utf8")).packages;
 const { packages: modelPackages, byName } = readReleaseModel(root);
 if (!Array.isArray(candidates) || !candidates.length || new Set(candidates.map((entry) => entry.name)).size !== candidates.length) throw new Error("Missing or duplicate release candidates.");
 for (const entry of candidates) {
-  if (!/-alpha\.\d+$/.test(entry.version) || byName.get(entry.name)?.manifest.version !== entry.version) throw new Error(`Invalid alpha candidate ${entry.name}@${entry.version}.`);
+  if (!validateReleaseVersion(entry.version, channel) || byName.get(entry.name)?.manifest.version !== entry.version) throw new Error(`Invalid ${channel} candidate ${entry.name}@${entry.version}.`);
 }
 const changedVersions = modelPackages.filter(({ path, manifest }) => {
   const previous = spawnSync("git", ["show", `HEAD^:${path}/package.json`], { cwd: root, encoding: "utf8" });
@@ -22,7 +26,7 @@ const changedVersions = modelPackages.filter(({ path, manifest }) => {
 }).map(({ manifest }) => manifest.name).sort();
 if (JSON.stringify(changedVersions) !== JSON.stringify(candidates.map((entry) => entry.name).sort())) throw new Error("Publish the release commit itself; candidates must exactly match its version changes.");
 function assertReady() {
-  if (git("branch", "--show-current") !== "main" && !(process.env.GITHUB_ACTIONS === "true" && process.env.GITHUB_REF === "refs/heads/main" && process.env.GITHUB_SHA === sha)) throw new Error("Publish alpha from a reviewed main checkout.");
+  if (git("branch", "--show-current") !== "main" && !(process.env.GITHUB_ACTIONS === "true" && process.env.GITHUB_REF === "refs/heads/main" && process.env.GITHUB_SHA === sha)) throw new Error(`Publish ${channel} from a reviewed main checkout.`);
   if (git("status", "--porcelain")) throw new Error("Commit the release plan before publishing; the checkout must be clean.");
   if (git("rev-parse", "HEAD") !== sha) throw new Error("HEAD changed during release validation.");
   if (readChangesets(root).length) throw new Error("Pending changesets remain. Run version:packages and review/commit its output first.");
@@ -46,10 +50,11 @@ try { readFileSync(latestBefore); } catch (error) {
   if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
   node("sync-alpha-dist-tags", "--capture-latest", latestBefore);
 }
+node("sync-alpha-dist-tags", "--check-baseline", "--latest-before", latestBefore);
 const cli = fileURLToPath(import.meta.resolve("@changesets/cli/bin.js"));
 const planPath = resolve(output, "publish-plan.json");
 run(process.execPath, [cli, "publish-plan", "--output", planPath]);
-const plan = alphaPublishPlan(JSON.parse(readFileSync(planPath, "utf8")), candidates);
+const plan = alphaPublishPlan(JSON.parse(readFileSync(planPath, "utf8")), candidates, channel);
 writeFileSync(planPath, `${JSON.stringify(plan, null, 2)}\n`);
 const packed = resolve(output, "packed");
 run(process.execPath, [cli, "pack", "--from-publish-plan", planPath, "--out-dir", packed]);
@@ -66,14 +71,14 @@ for (const delay of [0, 5, 10, 20, 40, 80]) {
   } catch (error) { lastError = error; }
 }
 if (lastError) throw lastError;
-run(process.execPath, [resolve(root, "tests/registry-consumer.mjs"), "--expected-root", root]);
+run(process.execPath, [resolve(root, "tests/registry-consumer.mjs"), "--tag", channel, "--expected-root", root]);
 const { packages } = readReleaseModel(root);
-const receipt = { commit: sha, verifiedAt: new Date().toISOString(), channel: "alpha", packages: packages.map(({ manifest }) => ({ name: manifest.name, version: manifest.version })) };
+const receipt = { commit: sha, verifiedAt: new Date().toISOString(), channel, packages: packages.map(({ manifest }) => ({ name: manifest.name, version: manifest.version })) };
 writeFileSync(resolve(output, "receipt.json"), `${JSON.stringify(receipt, null, 2)}\n`);
 const notes = packages.map(({ path, manifest }) => {
   const source = readFileSync(resolve(root, path, "CHANGELOG.md"), "utf8");
   const section = source.split(/^## /m).slice(1).find((section) => section.split("\n", 1)[0].trim() === manifest.version || section.split("\n", 1)[0].trim() === `v${manifest.version}`);
   return `## ${manifest.name}@${manifest.version}\n\n${section?.slice(section.indexOf("\n") + 1).trim() ?? ""}`;
 });
-writeFileSync(resolve(output, "release-notes.md"), `# Alpha release verification\n\nCommit: ${sha}\n\nThis records the verified package set, including unchanged packages.\n\n${notes.join("\n\n")}\n`);
+writeFileSync(resolve(output, "release-notes.md"), `# ${channel} release verification\n\nCommit: ${sha}\n\nThis records the verified package set, including unchanged packages.\n\n${notes.join("\n\n")}\n`);
 console.log(`Release verified. Receipt and per-package notes: ${output}`);

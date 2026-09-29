@@ -11,6 +11,7 @@ const root = fileURLToPath(new URL("..", import.meta.url));
 const fixture = mkdtempSync(resolve(tmpdir(), "vooya-github-release-"));
 const packages = [{ name: "@vooya/core", version: "0.1.0-alpha.12" }, { name: "@vooya/vite", version: "0.1.0-alpha.13" }];
 const tags = packages.map(({ name, version }) => `${name}@${version}`);
+let channel = "alpha";
 let sha;
 let state;
 const server = createServer(async (request, response) => {
@@ -48,6 +49,7 @@ try {
     write(`${directory}/package.json`, JSON.stringify({ name, version }));
     write(`${directory}/CHANGELOG.md`, `# Changelog\n\n## ${name.endsWith("core") ? "v" : ""}${version}\n\n### Fixes\n\n- Exact notes for ${name}.\n\n## 0.1.0-alpha.1\n\n- Historical notes stay out.\n`);
   }
+  write(".changeset/pre.json", JSON.stringify({ mode: "pre", tag: "alpha" }));
   write(".changeset/release.json", JSON.stringify({ packages }));
   for (const args of [["init", "--quiet"], ["add", "."], ["-c", "user.name=Vooya test", "-c", "user.email=tests@vooya.dev", "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "release fixture"]]) {
     const result = spawnSync("git", args, { cwd: fixture, encoding: "utf8" });
@@ -101,7 +103,7 @@ try {
   await fails("receipt for another commit", /does not match git HEAD/);
   assert.equal(state.requests.length, 0);
   reset();
-  write(receiptPath(), JSON.stringify({ commit: sha, packages: [packages[0]] }));
+  write(receiptPath(), JSON.stringify({ commit: sha, channel, packages: [packages[0]] }));
   await fails("missing candidate version in receipt", /missing exact candidate/);
   assert.equal(state.requests.length, 0);
 
@@ -120,7 +122,29 @@ try {
   await fails("repository must be owner/name", /GH_REPO must/, { GH_REPO: "https://github.com/test/vooya" });
   await fails("test override cannot send credentials to arbitrary hosts", /loopback test server/, { VOOYA_GITHUB_API_URL: "https://example.com/" });
   assert.equal(state.requests.length, 0);
-  console.log("GitHub release contract passed: receipt guards, exact notes, missing/existing releases, annotated/conflicting tags, partial retry, and endpoint guards.");
+  channel = "beta";
+  write(".changeset/pre.json", JSON.stringify({ mode: "pre", tag: channel }));
+  for (const [index, candidate] of packages.entries()) {
+    candidate.version = `0.1.0-beta.${index}`;
+    write(`packages/${candidate.name.slice(7)}/package.json`, JSON.stringify(candidate));
+    write(`packages/${candidate.name.slice(7)}/CHANGELOG.md`, `# Changelog\n\n## ${candidate.version}\n\n- Exact beta notes for ${candidate.name}.\n`);
+    tags[index] = `${candidate.name}@${candidate.version}`;
+  }
+  write(".changeset/release.json", JSON.stringify({ packages }));
+  reset();
+  state.failRelease = tags[1];
+  await fails("partial beta GitHub release can retry", /HTTP 503/);
+  await succeeds("beta retry finishes missing package only");
+  for (const release of state.releases.values()) {
+    assert.equal(release.prerelease, true);
+    assert.equal(release.make_latest, "false");
+    assert.match(release.tag_name, /0\.1\.0-beta\./);
+  }
+  reset();
+  write(receiptPath(), JSON.stringify({ commit: sha, channel: "alpha", packages }));
+  await fails("receipt from wrong channel cannot create beta releases", /receipt channel/);
+  assert.equal(state.requests.length, 0);
+  console.log("GitHub release contract passed: receipt guards, exact notes, missing/existing releases, annotated/conflicting tags, alpha/beta partial retry, channel receipts, and endpoint guards.");
 } finally {
   server.closeAllConnections();
   if (server.listening) await new Promise((done) => server.close(done));
@@ -131,7 +155,7 @@ function receiptPath() { return `.vooya-tools/release/${sha}/receipt.json`; }
 function write(path, text) { const destination = resolve(fixture, path); mkdirSync(resolve(destination, ".."), { recursive: true }); writeFileSync(destination, text); }
 function reset() {
   state = { requests: [], refs: new Map(), releases: new Map(), annotations: new Map(), failRelease: undefined };
-  write(receiptPath(), JSON.stringify({ commit: sha, packages }));
+  write(receiptPath(), JSON.stringify({ commit: sha, channel, packages }));
 }
 async function run(env = {}) {
   const child = spawn(process.execPath, [resolve(root, "scripts/generated/create-github-releases.js"), "--root", fixture], {

@@ -12,10 +12,11 @@ const require = createRequire(import.meta.url);
 const root = fileURLToPath(new URL("..", import.meta.url));
 const cli = require.resolve("@changesets/cli/bin.js");
 assert.equal(require("@changesets/cli/package.json").version, "3.0.3");
+for (const channel of ["alpha", "beta"]) {
 const fixture = mkdtempSync(resolve(tmpdir(), "vooya-release-pipeline-"));
 const expected = [
-  { name: "@vooya/core", version: "0.1.0-alpha.13" },
-  { name: "@vooya/vite", version: "0.1.0-alpha.24" },
+  { name: "@vooya/core", version: `0.1.0-${channel}.13` },
+  { name: "@vooya/vite", version: `0.1.0-${channel}.24` },
 ];
 
 try {
@@ -46,8 +47,8 @@ try {
   // shape, then run the production channel adapter and the real official pack
   // command. No publish or publish-plan command is invoked by this fixture.
   const upstream = { version: 1, plan: candidates.map((candidate) => [{ kind: "publish", access: "public", tag: "latest", ...candidate }]) };
-  const plan = alphaPublishPlan(upstream, candidates);
-  assert.deepEqual(plan.plan.map((group) => group.map((entry) => entry.tag)), [["alpha"], ["alpha"]]);
+  const plan = alphaPublishPlan(upstream, candidates, channel);
+  assert.deepEqual(plan.plan.map((group) => group.map((entry) => entry.tag)), [[channel], [channel]]);
   writeJson("artifacts/input-plan.json", plan);
   run(process.execPath, [cli, "pack", "--from-publish-plan", resolve(fixture, "artifacts/input-plan.json"), "--out-dir", resolve(fixture, "artifacts/packed")]);
   const packed = readJson("artifacts/packed/publish-plan.json");
@@ -67,7 +68,7 @@ try {
   }
   assert.equal(readdirSync(resolve(fixture, "artifacts/packed/packages")).length, candidates.length, "No unrelated package may be packed.");
   assert.equal(git("status", "--porcelain").trim(), "", "Packing must not mutate the committed release output.");
-  console.log("Release pipeline contract passed: real version wrapper, exact independent candidates, archived changeset, forced alpha plan, official offline pack, and tarball integrity/manifests. No registry or publish command ran.");
+  console.log(`Release pipeline contract passed for ${channel}: real version wrapper, independent candidates, archived changeset, forced channel, official offline pack, and tarball integrity/manifests. No registry or publish command ran.`);
 } finally {
   rmSync(fixture, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
 }
@@ -79,12 +80,12 @@ function setup() {
     changelog: "@changesets/cli/changelog", commit: false, fixed: [], linked: [],
     access: "public", baseBranch: "main", updateInternalDependencies: "patch", ignore: [], format: false,
   });
-  writeJson(".changeset/pre.json", { mode: "pre", tag: "alpha" });
+  writeJson(".changeset/pre.json", { mode: "pre", tag: channel });
   write(".changeset/core-events.md", '---\n"@vooya/core": patch\n---\n\nPreserve asynchronous event dispatch during component updates.\n');
   for (const [directory, version, dependencies] of [
-    ["core", "0.1.0-alpha.12", undefined],
-    ["vite", "0.1.0-alpha.23", { "@vooya/core": "0.1.0-alpha.12" }],
-    ["vue", "0.1.0-alpha.8", undefined],
+    ["core", `0.1.0-${channel}.12`, undefined],
+    ["vite", `0.1.0-${channel}.23`, { "@vooya/core": `0.1.0-${channel}.12` }],
+    ["vue", `0.1.0-${channel}.8`, undefined],
   ]) {
     writeJson(`packages/${directory}/package.json`, { name: `@vooya/${directory}`, version, license: "MIT", main: "index.js", ...(dependencies ? { dependencies } : {}) });
     write(`packages/${directory}/index.js`, "export const fixture = true;\n");
@@ -95,7 +96,7 @@ function setup() {
     packages: { "": { name: "vooya-release-pipeline-fixture", workspaces: ["packages/*"] }, ...Object.fromEntries(["core", "vite", "vue"].map((directory) => [`packages/${directory}`, readJson(`packages/${directory}/package.json`)])) },
   });
   mkdirSync(resolve(fixture, "scripts/generated"), { recursive: true });
-  for (const name of ["version-packages.js", "release-model.js"]) copyFileSync(resolve(root, "scripts/generated", name), resolve(fixture, "scripts/generated", name));
+  for (const name of ["version-packages.js", "release-model.js", "release-channel.js", "release-plan.js"]) copyFileSync(resolve(root, "scripts/generated", name), resolve(fixture, "scripts/generated", name));
   symlinkSync(resolve(root, "node_modules"), resolve(fixture, "node_modules"), process.platform === "win32" ? "junction" : "dir");
 }
 
@@ -120,4 +121,6 @@ function run(command, args) {
   if (result.error) throw result.error;
   assert.equal(result.status, 0, `${command} ${args.join(" ")}:\n${result.stdout}\n${result.stderr}`);
   return result.stdout;
+}
+
 }
