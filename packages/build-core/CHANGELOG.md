@@ -3,6 +3,35 @@
 Historical entries were reconstructed from published package metadata and release
 snapshots; see [release history evidence](../../docs/maintainers/release-history.md).
 
+## 0.1.0-beta.0
+
+### Patch Changes
+
+- cca8100: Prepare the first 0.1 beta package set for Rust-file authoring. Keep internal
+  dependencies aligned with the reviewed beta versions. Vue and React with Vite
+  remain the supported path; experimental adapters retain their documented limits.
+  Authors still provide a Rust/WASM toolchain; managed preset installation is
+  planned separately for 0.2.
+- c4a2698: Generate concrete TypeScript interfaces for derived Rust structs and unit enums
+  used in component props, events, and Store snapshots. Preserve each framework's
+  native Store state container. Missing schemas remain `unknown`; a known struct
+  with unrepresentable fields falls back to `Record<string, unknown>` rather than
+  promising an unverified shape. Includes the implementation merged in PR #122.
+- c4a2698: Resolve named schemas within their source group and conventional Rust module
+  paths. Distinct reachable types sharing a short name receive deterministic
+  aliases, including in nested fields and Store signatures. Ambiguous matches
+  report their candidates instead of selecting an arbitrary shape. `use` aliases,
+  inline modules, and `#[path]` overrides still require richer metadata. Includes
+  PR #125; this does not claim completion of full Rust name resolution.
+- 1e3e000: Serialize builds sharing one generated workspace without letting stale-lock
+  recovery remove a new owner's lock. Keep the previous JavaScript, WASM, and
+  workspace metadata intact when binding generation, schema validation, CSS or
+  TypeScript generation, artifact reads, or final installation fails.
+- Updated dependencies [cca8100]
+- Updated dependencies [c4a2698]
+  - @vooya/compiler@0.1.0-beta.0
+  - @vooya/core@0.1.0-beta.0
+
 ## 0.1.0-alpha.13
 
 - Preserve conventional Rust module lookup for multi-file `.rs` components and stores, including nested `mod` trees.

@@ -3,6 +3,16 @@
 Historical entries were reconstructed from published package metadata and release
 snapshots; see [release history evidence](../../docs/maintainers/release-history.md).
 
+## 0.1.0-beta.0
+
+### Patch Changes
+
+- cca8100: Prepare the first 0.1 beta package set for Rust-file authoring. Keep internal
+  dependencies aligned with the reviewed beta versions. Vue and React with Vite
+  remain the supported path; experimental adapters retain their documented limits.
+  Authors still provide a Rust/WASM toolchain; managed preset installation is
+  planned separately for 0.2.
+
 ## 0.1.0-alpha.12
 
 - Generate Solid and Svelte component declarations.

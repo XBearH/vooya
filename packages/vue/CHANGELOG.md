@@ -3,6 +3,20 @@
 Historical entries were reconstructed from published package metadata and release
 snapshots; see [release history evidence](../../docs/maintainers/release-history.md).
 
+## 0.1.0-beta.0
+
+### Patch Changes
+
+- cca8100: Prepare the first 0.1 beta package set for Rust-file authoring. Keep internal
+  dependencies aligned with the reviewed beta versions. Vue and React with Vite
+  remain the supported path; experimental adapters retain their documented limits.
+  Authors still provide a Rust/WASM toolchain; managed preset installation is
+  planned separately for 0.2.
+- f6dc677: Preserve nullable values at the framework boundary. React now distinguishes a
+  ready Store snapshot containing null from an unloaded Store. Vue preserves an
+  omitted optional Boolean prop as undefined so Rust receives None rather than
+  Some(false), while retaining explicit Boolean values and declared defaults.
+
 ## 0.1.0-alpha.12
 
 - Accept the shared `{ contract, loadBindings }` component bridge while retaining the previous two-argument call.
