@@ -31,7 +31,7 @@ export function readReleaseModel(root: string) {
   return { packages, byName, byId: byName };
 }
 
-// Only unconsumed entries participate in the next alpha release. Changesets v3
+// Only unconsumed entries participate in the next prerelease. Changesets v3
 // keeps consumed prerelease summaries in pre/ for the eventual stable changelog.
 export function readChangesets(root: string, model = readReleaseModel(root)) {
   return readdirSync(resolve(root, ".changeset")).filter((name) => name.endsWith(".md") && name !== "README.md").sort().map((name) => {

@@ -26,11 +26,22 @@ Write a concrete user-facing summary and describe any migration requirements.
 Use `patch`, `minor`, or `major` according to the public impact. Keep generated
 versions and changelogs in the release PR instead of editing them in a source PR.
 
-The repository is in alpha prerelease mode. Changesets moves consumed entries
+The repository is preparing the beta channel. A one-time changeset includes all
+ten public packages. Changesets 3 preserves the numeric alpha counter when its
+prerelease tag changes; switching `pre.json` alone does not reset it to zero.
+Use `npm run version:packages`: its first-beta adapter validates the complete
+official release plan and sets its versions to `0.1.0-beta.0` before the official
+applier updates dependencies, changelogs, and archives. Subsequent version steps
+use the normal Changesets CLI. This does not create a fixed or linked
+version group: later changesets still name only directly affected packages,
+with dependency propagation handled by Changesets.
+
+Changesets moves consumed entries
 into `.changeset/pre/` for the eventual stable changelog; their presence does
 not mean they are waiting to publish again. Preserve these entries and existing
 per-package changelog history, including older `v`-prefixed headings.
 
 See [the release guide](../docs/maintainers/releases.md) for release PRs,
-publication, and recovery. Exiting alpha requires a separately reviewed stable
-release configuration; the current publishing command accepts alpha only.
+publication, and recovery. Preparing beta does not publish it. Stable publication
+requires a separately reviewed release configuration; prerelease publishing
+must not promote packages through `latest`.

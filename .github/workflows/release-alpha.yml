@@ -106,13 +106,19 @@ jobs:
       - name: Install browser for release acceptance
         run: npx playwright install --with-deps chromium
 
-      - name: Restore the original latest-tag baseline on retries
+      - name: Read the reviewed prerelease channel
+        id: channel
+        run: |
+          npm run build:scripts
+          channel=$(node --input-type=module -e 'import { readReleaseChannel } from "./scripts/generated/release-channel.js"; console.log(readReleaseChannel(process.cwd()));')
+          echo "name=$channel" >> "$GITHUB_OUTPUT"
+      - name: Restore the original protected-tag baseline on retries
         id: baseline
         uses: actions/cache/restore@v4
         with:
           path: .vooya-tools/release/${{ github.sha }}/latest-before.json
-          key: alpha-latest-${{ github.sha }}
-      - name: Capture latest tags before any publication
+          key: ${{ steps.channel.outputs.name }}-protected-tags-${{ github.sha }}
+      - name: Capture protected tags before any publication
         if: steps.baseline.outputs.cache-hit != 'true'
         run: |
           if [ "$GITHUB_RUN_ATTEMPT" != "1" ]; then
@@ -127,18 +133,19 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: .vooya-tools/release/${{ github.sha }}/latest-before.json
-          key: alpha-latest-${{ github.sha }}
+          key: ${{ steps.channel.outputs.name }}-protected-tags-${{ github.sha }}
       - name: Preserve the baseline before publishing
         uses: actions/upload-artifact@v4
         with:
-          name: alpha-baseline-${{ github.sha }}-${{ github.run_attempt }}
+          name: ${{ steps.channel.outputs.name }}-baseline-${{ github.sha }}-${{ github.run_attempt }}
           path: .vooya-tools/release/${{ github.sha }}/latest-before.json
           if-no-files-found: error
           retention-days: 90
       - name: Validate, publish, and verify the same commit
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm run release:alpha
+          RELEASE_CHANNEL: ${{ steps.channel.outputs.name }}
+        run: node scripts/generated/publish-alpha.js --channel "$RELEASE_CHANNEL"
       - name: Create missing package GitHub Releases after acceptance
         env:
           GH_TOKEN: ${{ github.token }}
@@ -148,7 +155,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: alpha-release-${{ github.sha }}-${{ github.run_attempt }}
+          name: ${{ steps.channel.outputs.name }}-release-${{ github.sha }}-${{ github.run_attempt }}
           path: .vooya-tools/release/${{ github.sha }}/
           if-no-files-found: ignore
           retention-days: 90

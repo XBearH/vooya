@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseRegistryArguments, registryPackages, verifyRegistryLockfile, verifyRegistrySnapshot } from "./helpers/registry-release-contract.mjs";
+import { resolve } from "node:path";
+import { parseRegistryArguments, registryPackages, verifyPackedLockfile, verifyPackedSnapshot, verifyRegistryLockfile, verifyRegistrySnapshot } from "./helpers/registry-release-contract.mjs";
 
 function release() {
   const snapshot = Object.fromEntries(registryPackages.map((shortName) => {
@@ -100,11 +101,91 @@ test("candidate comparison is opt-in and compares per-package versions and inter
 });
 
 test("expected-root defaults to registry-only and allows an explicit CLI override of the environment", () => {
-  assert.deepEqual(parseRegistryArguments([]), { expectedRoot: undefined });
-  assert.deepEqual(parseRegistryArguments([], { VOOYA_REGISTRY_EXPECTED_ROOT: "/candidate" }), { expectedRoot: "/candidate" });
-  assert.deepEqual(parseRegistryArguments(["--expected-root", "/chosen"], { VOOYA_REGISTRY_EXPECTED_ROOT: "/candidate" }), { expectedRoot: "/chosen" });
-  assert.deepEqual(parseRegistryArguments(["--expected-root=/chosen"]), { expectedRoot: "/chosen" });
+  assert.deepEqual(parseRegistryArguments([]), { expectedRoot: undefined, packDir: undefined, tag: "alpha" });
+  assert.deepEqual(parseRegistryArguments([], { VOOYA_REGISTRY_EXPECTED_ROOT: "/candidate" }), { expectedRoot: "/candidate", packDir: undefined, tag: "alpha" });
+  assert.deepEqual(parseRegistryArguments(["--expected-root", "/chosen"], { VOOYA_REGISTRY_EXPECTED_ROOT: "/candidate" }), { expectedRoot: "/chosen", packDir: undefined, tag: "alpha" });
+  assert.deepEqual(parseRegistryArguments(["--expected-root=/chosen"]), { expectedRoot: "/chosen", packDir: undefined, tag: "alpha" });
   for (const args of [["--expected-root"], ["--expected-root="], ["--local"], ["--expected-root=a", "--expected-root=b"]]) {
     assert.throws(() => parseRegistryArguments(args));
   }
+});
+
+function betaRelease() {
+  return JSON.parse(JSON.stringify(release()).replaceAll("0.1.0-alpha.12", "0.1.0-beta.0").replaceAll("0.1.0-alpha.13", "0.1.0-beta.0").replaceAll('"alpha":', '"beta":'));
+}
+
+test("beta verification compares exact candidate versions and dependency pins, not just the channel spelling", () => {
+  const snapshot = betaRelease();
+  const expected = structuredClone(snapshot);
+  verifyRegistrySnapshot(snapshot, "beta", expected);
+  const mistaggedAlpha = release();
+  for (const manifest of Object.values(mistaggedAlpha)) manifest["dist-tags"].beta = manifest.version;
+  assert.throws(() => verifyRegistrySnapshot(mistaggedAlpha, "beta", mistaggedAlpha), /not a 0.1.0 beta/);
+  for (const framework of ["vue", "react"]) verifyRegistryLockfile(consumer(snapshot, framework), framework, snapshot);
+  const wrong = structuredClone(snapshot);
+  wrong["@vooya/vue"].version = "0.1.0-beta.1";
+  wrong["@vooya/vue"]["dist-tags"].beta = "0.1.0-beta.1";
+  assert.throws(() => verifyRegistrySnapshot(wrong, "beta", expected), /expected candidate/);
+  snapshot["@vooya/vite"].dependencies["@vooya/core"] = "0.1.0-beta.1";
+  assert.throws(() => verifyRegistrySnapshot(snapshot, "beta", expected), /must pin the snapshot version exactly/);
+});
+
+function packedRelease() {
+  const snapshot = betaRelease();
+  for (const manifest of Object.values(snapshot)) {
+    delete manifest["dist-tags"];
+    manifest.packedPath = resolve("candidate", `${manifest.name.slice(7)}.tgz`);
+    manifest.dist = { integrity: `sha512-${Buffer.alloc(64, 1).toString("base64")}` };
+  }
+  return snapshot;
+}
+
+function packedConsumer(snapshot) {
+  return { lockfileVersion: 3, packages: Object.fromEntries(["compiler", "core", "build-core", "vite", "vue"].map((name) => {
+    const manifest = snapshot[`@vooya/${name}`];
+    return [`node_modules/${manifest.name}`, { version: manifest.version, resolved: `file:../candidate/${name}.tgz`, integrity: manifest.dist.integrity }];
+  })) };
+}
+
+test("packed candidate manifests and lockfile must match exact versions, archive paths and bytes", () => {
+  const snapshot = packedRelease();
+  verifyPackedSnapshot(snapshot, betaRelease());
+  verifyPackedLockfile(packedConsumer(snapshot), "vue", snapshot, resolve("consumer"));
+  assert.throws(() => verifyPackedSnapshot(snapshot), /requires expected candidate/);
+  for (const patch of [
+    { resolved: "https://registry.npmjs.org/@vooya/core/-/core-0.1.0-beta.0.tgz" },
+    { resolved: "file:../other/core.tgz" },
+    { integrity: `sha512-${Buffer.alloc(64, 2).toString("base64")}` },
+    { link: true },
+  ]) {
+    const lock = packedConsumer(snapshot);
+    Object.assign(lock.packages["node_modules/@vooya/core"], patch);
+    assert.throws(() => verifyPackedLockfile(lock, "vue", snapshot, resolve("consumer")), /candidate tarball and integrity/);
+  }
+  const wrongVersion = packedRelease();
+  wrongVersion["@vooya/vue"].version = "0.1.0-beta.1";
+  assert.throws(() => verifyPackedSnapshot(wrongVersion, betaRelease()), /expected candidate/);
+  const missing = packedRelease();
+  delete missing["@vooya/build-core"];
+  assert.throws(() => verifyPackedSnapshot(missing, betaRelease()), /valid manifest|snapshot missing/);
+});
+
+test("candidate source modes cannot weaken registry-only provenance", () => {
+  const snapshot = packedRelease();
+  for (const manifest of Object.values(snapshot)) manifest["dist-tags"] = { beta: manifest.version };
+  assert.throws(() => verifyRegistrySnapshot(snapshot, "beta", betaRelease()), /non-registry tarball/);
+  const packed = packedRelease();
+  const lock = packedConsumer(packed);
+  lock.packages["node_modules/@vooya/vite/node_modules/@vooya/core"] = {
+    version: packed["@vooya/core"].version,
+    resolved: "https://registry.npmjs.org/@vooya/core/-/core-0.1.0-beta.0.tgz",
+  };
+  assert.throws(() => verifyPackedLockfile(lock, "vue", packed, resolve("consumer")), /candidate tarball and integrity/);
+});
+
+test("beta and packed commands require an explicit exact candidate source", () => {
+  assert.deepEqual(parseRegistryArguments(["--tag", "beta", "--expected-root", "/candidate"]), { tag: "beta", expectedRoot: "/candidate", packDir: undefined });
+  assert.deepEqual(parseRegistryArguments(["--pack-dir=/packed", "--expected-root=/candidate"]), { tag: "alpha", expectedRoot: "/candidate", packDir: "/packed" });
+  for (const args of [["--tag", "beta"], ["--pack-dir", "/packed"], ["--tag", "latest"], ["--tag", "alpha", "--tag", "beta"]]) assert.throws(() => parseRegistryArguments(args));
+  assert.throws(() => parseRegistryArguments([], { VOOYA_REGISTRY_TAG: "beta" }), /expected-root/);
 });
