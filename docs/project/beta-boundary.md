@@ -26,6 +26,8 @@ compatibility coverage, not the beta authoring recommendation.
   string-key map cases.
 - No global store, SSR, hydration, precompiled component product, or Turbopack
   support is promised by beta.
+- Vooya Lab is an alpha evidence program, not a second support matrix or an
+  automatic beta gate; see [RFC 0011](../rfcs/0011-lab-self-hosting-program.md).
 
 ## Lifecycle contract still being frozen
 

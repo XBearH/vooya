@@ -9,6 +9,8 @@ passing fixture is not mistaken for a broad support promise.
 - [Status](./status.md): what the current alpha can do and where it is limited.
 - [Compatibility matrix](./compatibility.md): framework, bundler, browser, and
   toolchain evidence.
+- [Lab self-hosting program](../rfcs/0011-lab-self-hosting-program.md): the
+  alpha evidence and ownership loop between this repository and Vooya Lab.
 - [Roadmap](../rfcs/0008-layer-boundary-and-roadmap.md): version-level direction
   from the integration foundation toward a stable layer contract.
 - [Releases](../maintainers/releases.md): coordinated package release rules.
