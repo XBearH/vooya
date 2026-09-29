@@ -1,7 +1,7 @@
 # API Reference
 
 This page lists the public consumption paths verified from the package exports.
-The alpha ABI may change between prereleases. Internal `@vooya/build-core`
+The beta ABI may change between prereleases. Internal `@vooya/build-core`
 helpers are implementation details unless a package page explicitly exports
 them.
 
@@ -137,7 +137,7 @@ not cover Svelte 3/4, SvelteKit, SSR, hydration, Vite 8, Rspack, or Webpack.
 
 ## `@vooya/rspack`
 
-The alpha.10 Rspack and Webpack implementations still expose a legacy `.voo`
+The beta.0 Rspack and Webpack implementations still expose a legacy `.voo`
 loader rule for their experimental fixtures. `.voo` is retired as a new
 authoring format and is scheduled for removal; use Rust-file authoring through
 the primary Vite path until those adapters are migrated.

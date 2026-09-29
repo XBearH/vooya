@@ -14,7 +14,7 @@ Rust-file component 会在应用作者的机器上编译，因此需要同时准
 - Node.js：按所用 Vite 版本选择；Vite 8 要求 `^20.19.0 || >=22.12.0`。
 - 稳定版 Rust toolchain 和 Cargo。
 - Rust target：`wasm32-unknown-unknown`。
-- `wasm-bindgen-cli`：当前 alpha 使用 `0.2.115`。
+- `wasm-bindgen-cli`：当前 beta 使用 `0.2.115`。
 
 ```sh
 rustup target add wasm32-unknown-unknown
@@ -26,7 +26,7 @@ cargo install wasm-bindgen-cli --version 0.2.115 --locked
 并确认包含 MSVC C++ build tools 和 Windows SDK；它们会提供 Cargo 编译所需的
 MSVC linker（`link.exe`）。这里只说“MSVC”并不代表安装一个单独的运行库就足够。
 
-这是当前 source authoring alpha 的现实前置条件。Vooya 后续会持续减少 Rust、WASM 和
+这是当前 source authoring beta 的现实前置条件。Vooya 后续会持续减少 Rust、WASM 和
 平台 linker 的手工配置，朝更接近开箱即用的体验演进；未来可能通过预编译产物、自动
 诊断和更完善的工具链管理降低门槛，但当前版本不会替用户安装 Rust 或 Visual Studio。
 
@@ -68,15 +68,19 @@ Rust Component 不负责页面布局、路由或整个应用的渲染；它只�
 ## 3. 配置宿主应用的 bundler
 
 以下配置都基于已有的 Vite 项目。选择你正在使用的宿主框架，并保持 Vooya
-相关包使用相同的 alpha 版本。
+从 `beta` 渠道安装 adapter 与 bundler integration，并保留 lockfile。
+首个 Beta 的十个包均为 `0.1.0-beta.0`；后续按包独立发版，内部依赖由发布流程
+锁定，不要求所有包永久同版本。不要混用未发布的 main 源码与 npm adapter。
+四个框架都已发包，但 Vue/React 是主支持路径，Solid/Svelte 仍是实验性支持；
+具体能力与验收边界见[兼容性矩阵](../project/compatibility.md)。
 
 ### Vue 3
 
 安装依赖：
 
 ```sh
-npm install @vooya/vue@alpha
-npm install --save-dev @vooya/vite@alpha
+npm install @vooya/vue@beta
+npm install --save-dev @vooya/vite@beta
 ```
 
 在 `vite.config.ts` 中把 `vooya()` 放在 Vue 插件之后：
@@ -96,8 +100,8 @@ export default defineConfig({
 安装依赖：
 
 ```sh
-npm install @vooya/react@alpha
-npm install --save-dev @vooya/vite@alpha
+npm install @vooya/react@beta
+npm install --save-dev @vooya/vite@beta
 ```
 
 在 `vite.config.ts` 中选择 React adapter：
@@ -117,8 +121,8 @@ export default defineConfig({
 安装依赖：
 
 ```sh
-npm install @vooya/solid@alpha
-npm install --save-dev @vooya/vite@alpha
+npm install @vooya/solid@beta
+npm install --save-dev @vooya/vite@beta
 ```
 
 在 `vite.config.ts` 中把 Vooya 放在 `vite-plugin-solid` 之后：
@@ -138,8 +142,8 @@ export default defineConfig({
 安装 adapter 与 Vite plugin：
 
 ```sh
-npm install @vooya/svelte@alpha
-npm install --save-dev @vooya/vite@alpha
+npm install @vooya/svelte@beta
+npm install --save-dev @vooya/vite@beta
 ```
 
 在 `vite.config.ts` 中把 Vooya 放在 `@sveltejs/vite-plugin-svelte` 之后：

@@ -2,6 +2,38 @@
 
 这张表记录仓库里的自动化证据，不是跨浏览器认证或生产支持承诺。
 
+## Beta 四框架适配情况
+
+Vue、React、Solid、Svelte 的 adapter 都已随 `0.1.0-beta.0` 发布，可以从 npm
+`beta` 渠道安装。但“已发包”不等于“支持宿主框架的全部功能”：Vue/React 是主支持
+路径，Solid/Svelte 仍为实验性支持。
+
+| 能力与验收 | Vue 3 | React 19 | Solid 1.9 | Svelte 5 |
+| --- | --- | --- | --- | --- |
+| Beta 支持级别 | 支持 | 支持 | 实验性 | 实验性 |
+| Rust 组件挂载、props 更新、事件回调 | 已验证 | 已验证 | 已验证 | 已验证 |
+| 实例级 Store action 与响应式快照 | `Ref`：`state.value` | snapshot：`state` | `Accessor`：`state()` | `Readable`：`$state` |
+| 组件/Store 声明、owned struct 与 unit enum 类型生成 | 已实现 | 已实现 | 已实现 | 已实现 |
+| 生命周期证据 | 挂载卸载、Store 延迟返回清理 | StrictMode、Store 延迟返回清理 | adapter 测试覆盖 owner 清理和延迟返回 | 子组件卸载时 Component/Store 各 dispose 一次 |
+| Rust 源码生产构建与浏览器用例 | Vite 7 + Chromium | Vite 7 + Chromium | Vite 7 + Chromium | Vite 7 + Chromium |
+| 干净项目安装打包产物及 npm 包的独立验收 | 已覆盖 | 已覆盖 | 尚未覆盖 | 尚未覆盖 |
+| SSR / hydration / slots | 未支持 | 未支持 | 未支持 | 未支持 |
+
+[Beta.0 发布流程](https://github.com/vooyajs/vooya/actions/runs/36614375254)
+已通过完整 `verify:release`，其中包含四个 `test:rust-*` 浏览器用例。adapter
+单元测试与共享 build-core 声明测试补充类型和生命周期证据；`test:packed-release`
+与 `test:registry` 的干净消费项目则仅覆盖 Vue/React，不能因为四个包都已发布就
+把这项证据扩展到 Solid/Svelte。
+
+这次 Beta 还修复了 React 将已就绪的 `null` Store 快照当成未加载的问题，以及
+Vue 将未传入的可选 Boolean prop 转成 `false` 的问题。Solid/Svelte 原有路径已
+保留这些值，不需要照搬相同修复。
+
+Solid/Svelte 下一步需要补齐干净 packed/npm consumer 验收和明确的 Vite 8
+证据，然后再考虑提升支持级别。配置示例见[快速开始](../guide/getting-started.md)。
+
+## 版本与工具链边界
+
 | 层 | 版本 | 状态 | 边界 |
 | --- | --- | --- | --- |
 | Node.js | `^20.19.0 \|\| >=22.12.0` | Supported | quickstart 覆盖 Ubuntu/Node 20、macOS/Node 22、Windows/Node 22 |

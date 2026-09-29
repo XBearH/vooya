@@ -1,6 +1,6 @@
 # API 参考
 
-这里列的是从包的公开导出和已验证消费路径中整理出的 API。alpha ABI 可能在
+这里列的是从包的公开导出和已验证消费路径中整理出的 API。prerelease ABI 可能在
 预发布版本间 breaking。没有公开导出的内部 `@vooya/build-core` helper 不在这里
 冒充稳定 API。
 
@@ -118,7 +118,7 @@ Vite 8、Rspack 或 Webpack。
 
 ## `@vooya/rspack`
 
-alpha.10 的 Rspack 和 Webpack 实现仍为 experimental fixture 暴露 legacy `.voo`
+beta.0 的 Rspack 和 Webpack 实现仍为 experimental fixture 暴露 legacy `.voo`
 loader rule。`.voo` 已作为新 authoring format 退休并计划移除；在这些 adapter
 完成迁移前，请使用主要的 Vite Rust-file 路径。
 

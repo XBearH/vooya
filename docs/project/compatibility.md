@@ -4,6 +4,41 @@ This matrix records browser tests that run in this repository. It is not a
 cross-browser certification, a production-support promise, or a claim about
 SSR and hydration. Each entry is evidence for the named test path only.
 
+## Beta framework capabilities
+
+All four adapter packages are published at `0.1.0-beta.0` on the npm `beta`
+channel. **Published** describes package availability; **supported** describes
+the narrower integration contract. Beta does not mean every host-framework
+feature is implemented.
+
+| Capability / evidence | Vue 3 | React 19 | Solid 1.9 | Svelte 5 |
+| --- | --- | --- | --- | --- |
+| Beta support level | Supported | Supported | Experimental | Experimental |
+| Rust-file Component mount, prop update, callback/event | Verified | Verified | Verified | Verified |
+| Instance-scoped Store actions and reactive snapshots | `Ref` (`state.value`) | Snapshot (`state`) | `Accessor` (`state()`) | `Readable` (`$state`) |
+| Generated component/Store declarations, owned struct and unit-enum types | Implemented | Implemented | Implemented | Implemented |
+| Lifecycle coverage | Mount/unmount and late Store resolution | StrictMode cleanup and late Store resolution | Owner cleanup and late Store resolution in adapter tests | Component and Store disposed once on child unmount |
+| Rust-file production browser fixture | Vite 7 + Chromium | Vite 7 + Chromium | Vite 7 + Chromium | Vite 7 + Chromium |
+| Separate clean packed and npm-registry consumer acceptance | Verified | Verified | Not yet covered | Not yet covered |
+| SSR / hydration / slots | Not supported | Not supported | Not supported | Not supported |
+
+The [beta.0 release run](https://github.com/vooyajs/vooya/actions/runs/36614375254)
+passed `verify:release`, including `test:rust-vue`, `test:rust-react`,
+`test:rust-solid`, and `test:rust-svelte`. Adapter tests and the shared
+build-core declaration tests supplement these browser fixtures. Publishing all
+ten packages and checking their registry metadata does not substitute for the
+separate Vue/React clean-consumer tests (`test:packed-release` and `test:registry`).
+
+Beta.0 also preserves React's ready `null` Store snapshot and Vue's omitted
+optional Boolean prop (`Option::None`, rather than `Some(false)`). Solid and
+Svelte already preserve those values; the React/Vue fixes do not imply those
+adapters were absent from earlier builds.
+
+For Solid/Svelte, the next compatibility work is clean packed/registry consumer
+acceptance and explicit Vite 8 coverage. Until that evidence exists, use their
+named Vite 7 path and retain the experimental label. SvelteKit is not covered.
+See [Getting started](../guide/getting-started.md) for all four configurations.
+
 ## Framework and host-tool minimums
 
 | Layer | Minimum version | Status | Evidence and boundary |
@@ -13,10 +48,10 @@ SSR and hydration. Each entry is evidence for the named test path only.
 | React | `>=19` | Supported | Browser fixtures cover 19.0.0 and 19.2.0; React 18 is below the supported minimum |
 | Solid | `>=1.9 <2` | Experimental | Vite 7 production browser fixture covers a Rust-file component, callback event, and Accessor-backed Store update; adapter unit tests cover owner cleanup and late resolution |
 | Svelte | `>=5 <6` | Experimental | Svelte 5 + Vite 7 production Chromium fixture covers Component mount/callback, Store action, Component prop update, generated `Readable` declarations, and Component/Store owner cleanup |
-| React 19 Rust-file authoring | Vite 7 | Experimental | Production build and browser interaction cover an instance-scoped store, `useSyncExternalStore`, atomic component prop updates, and StrictMode cleanup |
+| React 19 Rust-file authoring | Vite 7 | Supported beta path | Production build and browser interaction cover an instance-scoped store, `useSyncExternalStore`, atomic component prop updates, and StrictMode cleanup |
 | Vue Vapor | Vue 3.6 experimental | Verified, experimental | Vite 8 + Vue 3.6.0-beta.17 mounts a Rust-file component when the app uses Vue's `vaporInteropPlugin`; Vapor remains an upstream Vue opt-in |
 
-## Verified in local Playwright projects
+## Verified browser fixtures
 
 | Consumer path | Verified behavior | Evidence |
 | --- | --- | --- |
@@ -50,6 +85,8 @@ toolchain; a production smoke does not imply development-server or HMR support.
 - WebKit/Safari, mobile browsers, SSR, and hydration have no current
   compatibility claim. Firefox evidence is limited to the named Vue source
   component path above.
+- Solid on Vite 8, Rspack/Webpack, or browsers other than the named Chromium
+  fixture has no current compatibility claim.
 - Svelte 3/4, SvelteKit, Svelte SSR/hydration, Vite 8 with Svelte, and Svelte
   through Rspack/Webpack have no current compatibility claim. The Svelte row
   above is limited to its named Vite 7 + Chromium fixture.
@@ -64,8 +101,8 @@ toolchain; a production smoke does not imply development-server or HMR support.
 - The old `.voo` path was an exploratory intermediate. Remaining legacy fixtures
   are repository regression evidence only and are not a supported authoring or
   compatibility claim.
-- Alpha ABI revisions may be breaking; use one exact coordinated `@vooya`
-  package version.
+- Prerelease ABI revisions may be breaking. Use the `beta` channel and retain
+  the lockfile; package versions are independent and internal dependencies are exact.
 - Vapor applications must use Vue's Vapor runtime, `createVaporApp`, and
   `vaporInteropPlugin`; Vooya does not replace that host-framework setup.
 

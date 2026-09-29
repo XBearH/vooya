@@ -19,6 +19,9 @@ compatibility coverage, not the beta authoring recommendation.
 ## Beta product boundary
 
 - Vue 3 and React 19 adapters for Rust-file components and instance-scoped stores.
+- Solid 1.9 and Svelte 5 adapters are also published in beta.0, with experimental
+  Vite 7 + Chromium coverage. They do not yet share the clean packed/registry
+  consumer acceptance of Vue/React; see the [framework matrix](compatibility.md#beta-framework-capabilities).
 - Vite 7 and Vite 8 source builds; Vite+ is a separate compatibility smoke path.
 - Vue Vapor is experimental and depends on Vue's own Vapor interop setup.
 - Webpack and Rspack are experimental integration paths.
@@ -32,7 +35,7 @@ compatibility coverage, not the beta authoring recommendation.
 
 ## Lifecycle contract still being frozen
 
-The public lifecycle error has one shape in both adapters:
+The supported Vue and React adapters expose the same lifecycle error shape:
 
 ```ts
 type VooyaLifecycleError = {
@@ -81,7 +84,7 @@ The intended progression is:
 - **Precompiled consumer:** a project that consumes a published artifact and
   does not compile Rust at all.
 
-The current alpha implements the source-authoring path and explicit system
+The current beta implements the source-authoring path and explicit system
 toolchain diagnostics. Managed installation and a complete precompiled consumer
 workflow are future work; they must remain configuration-compatible with the
 same `vooya()` entry point.

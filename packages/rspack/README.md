@@ -9,7 +9,8 @@ lower-level Rspack plugin and loader rule for applications that configure
 Rspack directly. Source consumers still need Cargo, the
 `wasm32-unknown-unknown` target, and `wasm-bindgen-cli` `0.2.115`.
 
-Keep every `@vooya/*` package on the same exact alpha version.
+Install Vooya packages from the same `beta` channel and retain the lockfile;
+package versions are independent with exact internal dependencies.
 
 ## Rsbuild
 

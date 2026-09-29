@@ -18,7 +18,7 @@ prerequisites below apply to source authoring.
   for Vite 8).
 - A current stable Rust toolchain.
 - The `wasm32-unknown-unknown` Rust target.
-- `wasm-bindgen-cli` version `0.2.115` for the current alpha runtime.
+- `wasm-bindgen-cli` version `0.2.115` for the current beta runtime.
 
 ### Windows MSVC prerequisite
 
@@ -28,7 +28,7 @@ C++** workload, including MSVC C++ build tools and a Windows SDK. Cargo needs th
 MSVC linker, `link.exe`, to compile the CLI. Reopen the terminal after installation
 so the linker is available on `PATH`.
 
-These are current source-authoring prerequisites for the alpha. Vooya will continue
+These are current source-authoring prerequisites for the beta. Vooya will continue
 to reduce manual Rust, WASM, and platform-linker setup and move toward a more
 out-of-the-box experience. Future work may use precompiled artifacts, better
 diagnostics, and managed toolchain flows to lower this barrier; the current
@@ -56,9 +56,12 @@ first Cargo on `PATH`. To explicitly select Cargo in the Vite plugin, configure
 `toolchain.cargoPath`; to inspect that choice from the CLI, pass the same path
 with `vooya doctor --cargo-path <path>`.
 
-All `@vooya` packages must use the same alpha version. The repository `main`
-branch can lead the npm `alpha` tag while a breaking prerelease is being
-prepared; do not mix source from `main` with older published adapters.
+Install the adapter and bundler integration from the `beta` channel and retain
+your lockfile. The first beta publishes all ten packages at `0.1.0-beta.0`;
+later versions may differ by package, with exact internal dependencies managed
+by the release workflow. Do not mix unreleased `main` sources with npm adapters.
+See the [framework capability matrix](../project/compatibility.md#beta-framework-capabilities)
+for the distinction between supported Vue/React and experimental Solid/Svelte.
 
 ## npm and pnpm
 
@@ -91,15 +94,15 @@ application must already depend on `vue`, `vite`, and `@vitejs/plugin-vue`.
 npm:
 
 ```sh
-npm install @vooya/vue@alpha
-npm install --save-dev @vooya/vite@alpha
+npm install @vooya/vue@beta
+npm install --save-dev @vooya/vite@beta
 ```
 
 pnpm:
 
 ```sh
-pnpm add @vooya/vue@alpha
-pnpm add --save-dev @vooya/vite@alpha
+pnpm add @vooya/vue@beta
+pnpm add --save-dev @vooya/vite@beta
 ```
 
 Add `vooya()` after the Vue plugin:
@@ -124,15 +127,15 @@ Install the React adapter and Vite plugin.
 npm:
 
 ```sh
-npm install @vooya/react@alpha
-npm install --save-dev @vooya/vite@alpha
+npm install @vooya/react@beta
+npm install --save-dev @vooya/vite@beta
 ```
 
 pnpm:
 
 ```sh
-pnpm add @vooya/react@alpha
-pnpm add --save-dev @vooya/vite@alpha
+pnpm add @vooya/react@beta
+pnpm add --save-dev @vooya/vite@beta
 ```
 
 Select the React adapter in Vite:
@@ -155,8 +158,8 @@ before starting Vite.
 Install the Solid adapter and Vite plugin in an existing Solid application:
 
 ```sh
-npm install @vooya/solid@alpha
-npm install --save-dev @vooya/vite@alpha
+npm install @vooya/solid@beta
+npm install --save-dev @vooya/vite@beta
 ```
 
 Select the Solid adapter after `vite-plugin-solid`:
@@ -191,8 +194,8 @@ before starting Vite.
 Install the Svelte 5 adapter and Vite plugin in an existing Svelte application:
 
 ```sh
-npm install @vooya/svelte@alpha
-npm install --save-dev @vooya/vite@alpha
+npm install @vooya/svelte@beta
+npm install --save-dev @vooya/vite@beta
 ```
 
 Configure `@sveltejs/vite-plugin-svelte` before Vooya:
@@ -394,11 +397,11 @@ runtime, package manager, task runner, or every bundled tool.
 ## Experimental Rspack path
 
 For an existing Rsbuild Vue application, install the Vue adapter and Rspack
-integration from the same alpha channel:
+integration from the same beta channel:
 
 ```sh
-npm install @vooya/vue@alpha
-npm install --save-dev @vooya/rspack@alpha
+npm install @vooya/vue@beta
+npm install --save-dev @vooya/rspack@beta
 ```
 
 Add the integration beside the normal Vue plugin:
@@ -423,12 +426,12 @@ versions are not support claims. Exact fixture evidence currently uses 2.1.10.
 
 ## Experimental Webpack 5 path
 
-Install the framework adapter and Webpack integration at the same exact Vooya
-version. The current experimental range is Webpack `>=5`.
+Install the framework adapter and Webpack integration from the same `beta`
+channel. The current experimental range is Webpack `>=5`.
 
 ```sh
-npm install @vooya/vue@alpha
-npm install --save-dev @vooya/webpack@alpha
+npm install @vooya/vue@beta
+npm install --save-dev @vooya/webpack@beta
 ```
 
 Add the plugin's loader rule alongside the application's normal framework and
