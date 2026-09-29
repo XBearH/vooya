@@ -326,7 +326,7 @@ export default defineConfig({
     socialLinks: [{ icon: "github", link: "https://github.com/vooyajs/vooya" }],
     search: { provider: "local" },
     footer: {
-      message: "Vooya is an alpha project. Check the compatibility matrix before relying on a path.",
+      message: "Vooya is a beta project. Check the compatibility matrix before relying on a path.",
       copyright: "MIT OR Apache-2.0",
     },
   },

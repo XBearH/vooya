@@ -35,17 +35,17 @@ semantics instead of browser WebAssembly.
 
 - [Contributing](https://github.com/vooyajs/vooya/blob/main/CONTRIBUTING.md): project scope, development setup, testing,
   and pull request expectations.
-- [Getting started](guide/getting-started.md): install the alpha toolchain and
+- [Getting started](guide/getting-started.md): install the beta toolchain and
   run a first component through a current Vue, React, Solid, or Svelte adapter path.
 - [Rust-file authoring](guide/rust-file-authoring.md): component/store roles,
   schema records, generated bindings, and the current first-party Vite path.
 - [API reference](reference/api.md): public package exports, options, and
-  current alpha boundaries.
+  current beta boundaries.
 - [The component boundary](concepts/component-boundary.md): what the host
   framework owns, what WASM owns, and why that boundary exists.
 - [Tooling reference](reference/tooling.md): Vite options, generated files,
   Rust dependencies, and development rebuilds.
-- [Maintainer releases](maintainers/releases.md): release state, alpha
+- [Maintainer releases](maintainers/releases.md): release state, prerelease
   publication, and the stable-release lifecycle.
 - [Project status](project/status.md): what works, what remains experimental,
   and the next milestones.
