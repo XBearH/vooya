@@ -42,7 +42,16 @@ try {
 
   writeFileSync(componentPath, source.replace("Count: {}", "Recovered: {}"));
   await page.getByRole("button", { name: "Recovered: 0" }).waitFor();
-  console.log("Verified Rust-file HMR rebuild, failure recovery, and full reload.");
+  // Burst edits can arrive while a synchronous Rust build is still running.
+  // The last saved source must eventually win without restarting the server.
+  for (let revision = 0; revision < 5; revision++) {
+    writeFileSync(componentPath, source.replace("Count: {}", `Rapid ${revision}: {}`));
+    await new Promise((done) => setTimeout(done, 25));
+  }
+  await page.getByRole("button", { name: "Rapid 4: 0" }).waitFor();
+  await page.locator(".store-add").click();
+  await page.getByRole("button", { name: "Rapid 4: 1" }).waitFor();
+  console.log("Verified Rust-file HMR rebuild, failure recovery, rapid-save coalescing, and full reload.");
 } finally {
   await browser?.close();
   if (server && server.exitCode === null) {

@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import fs, { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import test from "node:test";
+import { parseVooComponent } from "@vooya/compiler";
 
 import { buildApplication, discoverRustSourceFiles, findNearestCargoManifest, generateRustCrateRoot, generateRustSourceRoot, generatedCargoManifest, remapRustDiagnostic, resolveRustBuildOptions, resolveRustDependencyRoots, resolveRuntimeCrateRoot, resolveVooyaCrateRoot, rustModuleIdentifier, selectRustRootModules } from "../dist/index.js";
 
@@ -75,6 +77,23 @@ web-sys = { version = "0.3", features = ["HtmlCanvasElement"] }
   }
 });
 
+test("buildApplication rejects missing applicationRoot before creating a workspace", () => {
+  const root = mkdtempSync(resolve(tmpdir(), "vooya-invalid-build-root-"));
+  try {
+    for (const applicationRoot of [undefined, null, ""]) {
+      assert.throws(() => buildApplication({
+        applicationRoot,
+        workspaceRoot: resolve(root, "workspace"),
+        runtimeCrateRoot: root,
+        toolchain: {},
+      }), { message: "Vooya build requires applicationRoot." });
+      assert.deepEqual(readdirSync(root), []);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("buildApplication writes inherited Cargo defaults into the generated crate", () => {
   const root = mkdtempSync(resolve(tmpdir(), "vooya-cargo-build-"));
   const workspaceRoot = resolve(root, ".vooya");
@@ -111,6 +130,189 @@ web-sys = { version = "0.3", features = ["HtmlCanvasElement"] }
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("buildApplication recovers from a stale workspace lock", () => {
+  const root = mkdtempSync(resolve(tmpdir(), "vooya-stale-lock-"));
+  const workspaceRoot = resolve(root, ".vooya");
+  const toolchain = {
+    environment: {},
+    cargo: { path: "/selected/cargo", version: "cargo 1.94.0" },
+    rustc: { path: "/selected/rustc", version: "rustc 1.94.0", verboseVersion: "rustc 1.94.0", sysroot: "/selected" },
+    target: { triple: "wasm32-unknown-unknown", libdir: "/selected/wasm" },
+    wasmBindgen: { path: "/selected/wasm-bindgen", version: "0.2.115" },
+  };
+  try {
+    mkdirSync(workspaceRoot, { recursive: true });
+    writeFileSync(resolve(workspaceRoot, ".build.lock"), "2147483647\n");
+    buildApplication({
+      applicationRoot: root,
+      runtimeCrateRoot: "/runtime",
+      workspaceRoot,
+      toolchain,
+      spawn() { return { status: 0, stdout: "", stderr: "" }; },
+      exec(command, args) {
+        const outputDir = args[args.indexOf("--out-dir") + 1];
+        writeFileSync(resolve(outputDir, "vooya_app.js"), "");
+        writeFileSync(resolve(outputDir, "vooya_app_bg.wasm"), Buffer.alloc(0));
+      },
+    });
+    assert.equal(existsSync(resolve(workspaceRoot, ".build.lock")), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("keeps the last successful WASM artifact when binding generation fails", () => {
+  const root = mkdtempSync(resolve(tmpdir(), "vooya-staged-output-"));
+  const workspaceRoot = resolve(root, ".vooya");
+  const toolchain = {
+    environment: {},
+    cargo: { path: "/selected/cargo", version: "cargo 1.94.0" },
+    rustc: { path: "/selected/rustc", version: "rustc 1.94.0", verboseVersion: "rustc 1.94.0", sysroot: "/selected" },
+    target: { triple: "wasm32-unknown-unknown", libdir: "/selected/wasm" },
+    wasmBindgen: { path: "/selected/wasm-bindgen", version: "0.2.115" },
+  };
+  const options = {
+    applicationRoot: root,
+    runtimeCrateRoot: "/runtime",
+    workspaceRoot,
+    toolchain,
+    spawn() { return { status: 0, stdout: "", stderr: "" }; },
+  };
+  try {
+    buildApplication({
+      ...options,
+      exec(command, args) {
+        const outputDir = args[args.indexOf("--out-dir") + 1];
+        writeFileSync(resolve(outputDir, "vooya_app.js"), "old loader");
+        writeFileSync(resolve(outputDir, "vooya_app_bg.wasm"), Buffer.from("old wasm"));
+      },
+    });
+    assert.throws(
+      () => buildApplication({ ...options, exec() { throw new Error("binding failed"); } }),
+      /wasm-bindgen failed/,
+    );
+    assert.equal(readFileSync(resolve(workspaceRoot, "wasm/vooya_app.js"), "utf8"), "old loader");
+    assert.deepEqual(readFileSync(resolve(workspaceRoot, "wasm/vooya_app_bg.wasm")), Buffer.from("old wasm"));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+function readOutputTree(directory) {
+  return readdirSync(directory, { withFileTypes: true })
+    .sort((left, right) => left.name.localeCompare(right.name))
+    .map((entry) => [entry.name, entry.isDirectory()
+      ? readOutputTree(resolve(directory, entry.name))
+      : readFileSync(resolve(directory, entry.name))]);
+}
+
+for (const failure of ["CSS transformation", "declaration generation", "runtime JavaScript read", "metadata write", "metadata installation"]) {
+  test(`preserves all previous artifacts and metadata after ${failure} fails`, () => {
+    const root = mkdtempSync(resolve(tmpdir(), "vooya-late-build-failure-"));
+    const workspaceRoot = resolve(root, ".vooya");
+    const outputDir = resolve(workspaceRoot, "wasm");
+    const metadataPath = resolve(workspaceRoot, "metadata.json");
+    const originalWrite = fs.writeFileSync;
+    const originalRename = fs.renameSync;
+    const toolchain = {
+      environment: {},
+      cargo: { path: "/selected/cargo", version: "cargo 1.94.0" },
+      rustc: { path: "/selected/rustc", version: "rustc 1.94.0", verboseVersion: "rustc 1.94.0", sysroot: "/selected" },
+      target: { triple: "wasm32-unknown-unknown", libdir: "/selected/wasm" },
+      wasmBindgen: { path: "/selected/wasm-bindgen", version: "0.2.115" },
+    };
+    const options = {
+      applicationRoot: root,
+      runtimeCrateRoot: "/runtime",
+      workspaceRoot,
+      toolchain,
+      spawn() { return { status: 0, stdout: "", stderr: "" }; },
+    };
+    let stagingOutput;
+    let injectedFailure = false;
+    try {
+      buildApplication({
+        ...options,
+        exec(command, args) {
+          const directory = args[args.indexOf("--out-dir") + 1];
+          writeFileSync(resolve(directory, "vooya_app.js"), "old loader");
+          writeFileSync(resolve(directory, "vooya_app_bg.wasm"), Buffer.from("old wasm"));
+          mkdirSync(resolve(directory, "snippets"));
+          writeFileSync(resolve(directory, "snippets/helper.js"), "old supporting module");
+        },
+      });
+      const oldOutput = readOutputTree(outputDir);
+      const oldMetadata = readFileSync(metadataPath);
+      const workspaceEntries = readdirSync(workspaceRoot).sort();
+      const component = parseVooComponent(`<component name="Counter">
+props:
+  initial: i32 = 0
+</component>
+<rust>
+fn counter() {}
+</rust>
+<style scoped>
+.counter { display: flex; }
+</style>`, resolve(root, "Counter.voo"));
+      if (failure === "CSS transformation") component.style.content = ".counter {";
+      if (failure === "metadata write") {
+        fs.writeFileSync = (path, data, ...args) => {
+          if (String(path).startsWith(`${metadataPath}.staging-`)) {
+            injectedFailure = true;
+            originalWrite(path, '{"partial":', ...args);
+            throw Object.assign(new Error("injected metadata write failure"), { code: "EIO" });
+          }
+          return originalWrite(path, data, ...args);
+        };
+      }
+      if (failure === "metadata installation") {
+        fs.renameSync = (source, destination) => {
+          if (String(source).startsWith(`${metadataPath}.staging-`) && String(destination) === metadataPath) {
+            // The new output is already installed: this exercises rollback,
+            // rather than merely rejecting a candidate before commit begins.
+            assert.equal(readFileSync(resolve(outputDir, "vooya_app.js"), "utf8"), "new loader");
+            injectedFailure = true;
+            throw Object.assign(new Error("injected metadata installation failure"), { code: "EIO" });
+          }
+          return originalRename(source, destination);
+        };
+      }
+      syncBuiltinESMExports();
+      const expectedError = {
+        "CSS transformation": /Unclosed block/,
+        "declaration generation": /Unknown Vooya framework/,
+        "runtime JavaScript read": /ENOENT.*vooya_app\.js/,
+        "metadata write": /injected metadata write failure/,
+        "metadata installation": /injected metadata installation failure/,
+      }[failure];
+      assert.throws(() => buildApplication({
+        ...options,
+        components: [component],
+        framework: failure === "declaration generation" ? "unsupported" : "vue",
+        toolchain: { ...toolchain, cargo: { ...toolchain.cargo, version: "cargo candidate" } },
+        exec(command, args) {
+          stagingOutput = args[args.indexOf("--out-dir") + 1];
+          if (failure !== "runtime JavaScript read") {
+            writeFileSync(resolve(stagingOutput, "vooya_app.js"), "new loader");
+          }
+          writeFileSync(resolve(stagingOutput, "vooya_app_bg.wasm"), Buffer.from("new wasm"));
+        },
+      }), expectedError);
+      assert.ok(stagingOutput, "failure must occur after binding generation");
+      if (failure.startsWith("metadata")) assert.equal(injectedFailure, true);
+      assert.deepEqual(readOutputTree(outputDir), oldOutput);
+      assert.deepEqual(readFileSync(metadataPath), oldMetadata);
+      assert.equal(existsSync(stagingOutput), false, "failed output staging must be removed");
+      assert.deepEqual(readdirSync(workspaceRoot).sort(), workspaceEntries, "no staging, backup, or lock files may remain");
+    } finally {
+      fs.writeFileSync = originalWrite;
+      fs.renameSync = originalRename;
+      syncBuiltinESMExports();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+}
 
 test("uses Vooya defaults when Cargo configuration is absent", () => {
   const root = mkdtempSync(resolve(tmpdir(), "vooya-no-cargo-"));
@@ -172,7 +374,7 @@ test("maps diagnostics from copied multi-file modules back to authored files", (
     rendered: "error\n --> src/rust/src/MathPlot/series.rs:2:15\n  |\n2 | missing\n",
     spans: [{ file_name: "src/rust/src/MathPlot/series.rs", line_start: 2, column_start: 15 }],
   }, new Map([[generated, { id: authored, startLine: 1, generatedLineOffset: 0 }]]), generatedRoot);
-  assert.match(diagnostic, /\/project\/src\/MathPlot\/series\.rs:2:15/);
+  assert.ok(diagnostic.includes(`${authored}:2:15`), diagnostic);
   assert.doesNotMatch(diagnostic, /src\/rust\/src\/MathPlot\/series\.rs:2:15/);
 });
 
@@ -209,6 +411,14 @@ test("generates a conventional authored root for multi-file Rust modules", () =>
   assert.match(root, /#\[allow\(non_snake_case\)\]\npub mod MathPlot;/);
   assert.match(root, /#\[allow\(non_snake_case\)\]\nmod components;/);
   assert.doesNotMatch(root, /spec|MathLab/);
+});
+
+test("renamed Rust modules retain their authored path after an identifier collision", () => {
+  const root = generateRustSourceRoot([
+    "rust/src/a-b.rs",
+    "rust/src/a_b.rs",
+  ], ["rust/src/a_b.rs"], "rust/src");
+  assert.equal(root, '#[path = "a-b.rs"]\nmod a_b;\n#[path = "a_b.rs"]\npub mod a_b_2;\n');
 });
 
 test("discovers ordinary Rust modules while excluding crate roots", () => {
