@@ -20,10 +20,12 @@ versioned independently. Preparing or pushing this source change does not
 publish beta or replace the published alpha installation path. Versioning and
 publication remain separate reviewed steps.
 
-Maintainer tooling requires Node.js `^22.11.0 || ^24.0.0 || >=26.0.0` and npm
-`>=10.9.0`; Node.js 24 is recommended. Vite examples require at least Node.js
-22.12 on the Node.js 22 line. This does not change the published packages'
-Node.js 20 consumer compatibility.
+Use Node.js 22.12 or newer on the 22.x line with npm 10.9.x for release
+preparation, matching the release workflow. The current rehearsal uses Node.js
+22.23.2 and npm 10.9.8. Although Changesets also supports newer Node versions,
+npm 11 currently rewrites optional peer entries differently from the CI npm 10
+lockfile; do not regenerate release lockfiles with npm 11. This does not change
+the published packages' Node.js 20 consumer compatibility.
 
 ## Contributor changes
 

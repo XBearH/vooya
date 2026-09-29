@@ -452,9 +452,9 @@ npm run dev:trace     # trace-waterfall interaction case
 
 Repository development also requires the Rust target and pinned wasm-bindgen
 CLI shown in the quick start above. Maintainer release tooling uses Changesets
-3.0.3 and needs Node.js 22.11 or newer on a supported LTS line and npm 10.9 or
-newer; Node.js 24 is recommended for repository work. The consumer requirements
-in the quick start remain unchanged.
+3.0.3. Use the CI Node.js 22/npm 10.9.x combination when updating the lockfile or
+preparing releases; see the [release guide](docs/maintainers/releases.md).
+The consumer requirements in the quick start remain unchanged.
 
 ## Packages
 
