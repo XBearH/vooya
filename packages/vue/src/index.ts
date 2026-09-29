@@ -167,7 +167,10 @@ export function defineVooyaComponent(
       {
         type: constructors[prop.type] as any,
         required: prop.required,
-        ...(Object.hasOwn(prop, "defaultValue") ? { default: prop.defaultValue } : {}),
+        ...(Object.hasOwn(prop, "defaultValue")
+          ? { default: prop.defaultValue }
+          // Vue otherwise casts an absent Boolean to false, losing Option::None.
+          : prop.type === "boolean" && !prop.required ? { default: undefined } : {}),
       },
     ]),
   );
