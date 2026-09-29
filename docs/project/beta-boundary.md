@@ -26,6 +26,9 @@ compatibility coverage, not the beta authoring recommendation.
   string-key map cases.
 - No global store, SSR, hydration, precompiled component product, or Turbopack
   support is promised by beta.
+- Rust is the only first-party source-authoring language. Future language
+  providers are post-beta research and require their own evidence and release
+  status; see [Language provider research](language-provider-research.md).
 
 ## Lifecycle contract still being frozen
 

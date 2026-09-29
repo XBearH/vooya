@@ -55,6 +55,8 @@ semantics instead of browser WebAssembly.
   the limits of their conclusions.
 - [Beta boundary](project/beta-boundary.md): the current product scope,
   authoring decision, and remaining contract gate.
+- [Language provider research](project/language-provider-research.md): the
+  post-beta artifact/provider seam; it does not expand Rust-only beta support.
 - [Scatter-plot demo](guide/scatter-plot.md): a repeatable browser check for a
   Rust-owned Canvas rendering surface.
 
