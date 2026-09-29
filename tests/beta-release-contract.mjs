@@ -58,6 +58,10 @@ try {
   assert(pending.includes("first-source-author-beta.md"), "First beta must explicitly include all public packages.");
   synchronizeLockfile();
   const before = snapshot();
+  const preview = spawnSync(process.execPath, [resolve(fixture, "scripts/generated/release-status.js")], { cwd: fixture, encoding: "utf8" });
+  assert.equal(preview.status, 0, preview.stderr);
+  for (const [name, version] of initialVersions) assert(preview.stdout.includes(`${name}: ${version} -> 0.1.0-beta.0`), `${name}: preview must match the actual first-beta plan.`);
+  assert.deepEqual(snapshot(), before, "Release preview must not modify any file.");
   const note = readFileSync(betaNote, "utf8");
   rmSync(betaNote);
   const incomplete = spawnSync(process.execPath, [resolve(fixture, "scripts/generated/version-packages.js")], { cwd: fixture, encoding: "utf8" });

@@ -20,23 +20,9 @@ const packages = readReleaseModel(root).packages.filter(({ manifest }) => before
 if (packages.length) writeFileSync(resolve(root, ".changeset/release.json"), `${JSON.stringify({ packages }, null, 2)}\n`);
 
 async function versionFirstBeta() {
-  const { getPackages } = await import("@manypkg/get-packages");
-  const { readConfig } = await import("@changesets/config");
-  const { readChangesets } = await import("@changesets/read");
-  const { assembleReleasePlan } = await import("@changesets/assemble-release-plan");
+  const { readReviewedReleasePlan } = await import("./release-plan.js");
   const { applyReleasePlan } = await import("@changesets/apply-release-plan");
-  const workspace = await getPackages(root);
-  const result = await readConfig(root, workspace);
-  if (result.errors) throw new Error(result.errors.join("\n"));
-  const plan = assembleReleasePlan(await readChangesets(root), workspace, result.config, pre);
-  const expected = new Set(before.map(({ name }) => name));
-  if (plan.releases.length !== expected.size || plan.releases.some((release) => !expected.delete(release.name) || !/^0\.1\.0-beta\.\d+$/.test(release.newVersion)) || expected.size) {
-    throw new Error("The first beta plan must include every public package at base version 0.1.0. Add a changeset for the missing packages; do not edit package versions by hand.");
-  }
-  // Changesets 3 carries alpha's numeric counter into a different pre tag.
-  // Normalize this one channel transition in its plan; its official applier
-  // still owns dependency pins, changelogs, package versions and pre archives.
-  for (const release of plan.releases) release.newVersion = "0.1.0-beta.0";
-  await applyReleasePlan(plan, workspace, result.config, undefined, root);
+  const { plan, workspace, config } = await readReviewedReleasePlan(root);
+  await applyReleasePlan(plan, workspace, config, undefined, root);
   console.log(`Prepared ${plan.releases.length} packages for the first 0.1.0-beta.0 release.`);
 }

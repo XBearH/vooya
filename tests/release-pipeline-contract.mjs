@@ -96,7 +96,7 @@ function setup() {
     packages: { "": { name: "vooya-release-pipeline-fixture", workspaces: ["packages/*"] }, ...Object.fromEntries(["core", "vite", "vue"].map((directory) => [`packages/${directory}`, readJson(`packages/${directory}/package.json`)])) },
   });
   mkdirSync(resolve(fixture, "scripts/generated"), { recursive: true });
-  for (const name of ["version-packages.js", "release-model.js", "release-channel.js"]) copyFileSync(resolve(root, "scripts/generated", name), resolve(fixture, "scripts/generated", name));
+  for (const name of ["version-packages.js", "release-model.js", "release-channel.js", "release-plan.js"]) copyFileSync(resolve(root, "scripts/generated", name), resolve(fixture, "scripts/generated", name));
   symlinkSync(resolve(root, "node_modules"), resolve(fixture, "node_modules"), process.platform === "win32" ? "junction" : "dir");
 }
 
