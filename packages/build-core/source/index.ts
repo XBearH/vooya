@@ -1,10 +1,12 @@
 // This package is intentionally bundler-neutral: adapters own virtual modules,
 // watching and presentation, while this module owns the Rust/WASM application build.
 import { execFileSync, spawnSync } from "node:child_process";
-import { closeSync, cpSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { cpSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, relative, resolve } from "node:path";
 
+import { acquireBuildLock } from "./build-lock.js";
 import { CargoBuildError, VooyaUserError } from "./errors.js";
 import { resolveRustBuildOptions } from "./cargo-manifest.js";
 import type { RustBuildOptions, RustDependency } from "./cargo-manifest.js";
@@ -338,7 +340,7 @@ function buildApplicationUnlocked({
   mkdirSync(sourceDir, { recursive: true });
   // This directory is generated state. Reconcile it on every build so removed
   // or renamed source files cannot remain as phantom Rust modules.
-  rmSync(rustSourceDir, { force: true, recursive: true });
+  removeDirectory(rustSourceDir);
   mkdirSync(rustSourceDir, { recursive: true });
   for (const [index, component] of components.entries()) {
     const sourcePath = resolve(sourceDir, `${index}-${component.name}.rs`);
@@ -434,6 +436,7 @@ function buildApplicationUnlocked({
   );
 
   const stagingOutputDir = createStagingDirectory(outputDir);
+  const stagingMetadata = `${workspace.metadata}.staging-${randomUUID()}`;
   try {
     exec(
       toolchain.wasmBindgen.path,
@@ -444,13 +447,13 @@ function buildApplicationUnlocked({
         ),
         "--target",
         "web",
-          "--out-dir",
-          stagingOutputDir,
+        "--out-dir",
+        stagingOutputDir,
       ],
       { cwd: applicationRoot, env: toolchain.environment, stdio: "inherit" },
     );
   } catch (cause) {
-    removeDirectory(stagingOutputDir);
+    discardStaging(stagingOutputDir);
     const detail = cause instanceof Error ? cause.message : String(cause);
     throw new VooyaUserError(
       `wasm-bindgen failed using ${toolchain.wasmBindgen.path}: ${detail}`,
@@ -462,75 +465,83 @@ function buildApplicationUnlocked({
   let wasmBytes: Uint8Array;
   try {
     wasmBytes = new Uint8Array(readFileSync(stagedWasm));
-  // Test doubles and legacy precompiled artifacts may not contain a full WASM
-  // binary. Treat those as schema-less artifacts; a real WASM binary is still
-  // parsed strictly and malformed schema sections fail the build.
-  const schema = isWasmBinary(wasmBytes)
+    // Test doubles and legacy precompiled artifacts may not contain a full WASM
+    // binary. Treat those as schema-less artifacts; a real WASM binary is still
+    // parsed strictly and malformed schema sections fail the build.
+    const schema = isWasmBinary(wasmBytes)
       ? readVooyaSchema(wasmBytes)
       : { version: 1 as const, records: [] };
-  const schemaIndex = indexVooyaSchema(schema);
-  validateVooyaSchemaGroups(schemaIndex);
-  const abiVersions = components.map(
-    (component) => generatedAdapterDefinition(component).abiVersion,
-  );
-  commitStagedDirectory(stagingOutputDir, outputDir);
-  const runtimeModule = resolve(outputDir, "vooya_app.js");
-  const wasm = resolve(outputDir, "vooya_app_bg.wasm");
-  writeWorkspaceMetadata(workspace, {
-    abiVersions,
-    toolchain: {
-      cargo: toolchain.cargo.version,
-      rustc: toolchain.rustc.version,
-      target: toolchain.target.triple,
-      wasmBindgen: toolchain.wasmBindgen.version,
-    },
-  });
-  const schemaContracts = buildRustComponentContracts(schemaIndex);
-  return {
-    workspaceRoot: workspace.root,
-    runtimeModule,
-    javascript: { path: runtimeModule, code: readFileSync(runtimeModule, "utf8") },
-    wasm: { path: wasm, bytes: wasmBytes },
-    schema,
-    css: components
-      .filter((component) => component.style)
-      .map((component) => ({
-        componentId: component.id ?? component.name,
-        code: compileVooStyle(component),
-      })),
-    declarations: components.length > 0
-      ? components.map((component) => ({
+    const schemaIndex = indexVooyaSchema(schema);
+    validateVooyaSchemaGroups(schemaIndex);
+    const abiVersions = components.map(
+      (component) => generatedAdapterDefinition(component).abiVersion,
+    );
+    const runtimeModule = resolve(outputDir, "vooya_app.js");
+    const wasm = resolve(outputDir, "vooya_app_bg.wasm");
+    const schemaContracts = buildRustComponentContracts(schemaIndex);
+    const result: BuildApplicationResult = {
+      workspaceRoot: workspace.root,
+      runtimeModule,
+      javascript: { path: runtimeModule, code: readFileSync(resolve(stagingOutputDir, "vooya_app.js"), "utf8") },
+      wasm: { path: wasm, bytes: wasmBytes },
+      schema,
+      css: components
+        .filter((component) => component.style)
+        .map((component) => ({
           componentId: component.id ?? component.name,
-          framework,
-          code: generateVooDeclaration(component, framework),
-        }))
-      : [
-        ...schemaContracts.map((contract) => ({
-          componentId: contract.component.id,
-          framework,
-          code: generateRustSchemaDeclaration({ contract, framework, types: schemaIndex.types }),
+          code: compileVooStyle(component),
         })),
-        ...schemaIndex.stores.map((store) => ({
-          componentId: store.id,
-          framework,
-          code: generateRustStoreDeclaration(store, framework, schemaIndex.types),
-        })),
+      declarations: components.length > 0
+        ? components.map((component) => ({
+            componentId: component.id ?? component.name,
+            framework,
+            code: generateVooDeclaration(component, framework),
+          }))
+        : [
+          ...schemaContracts.map((contract) => ({
+            componentId: contract.component.id,
+            framework,
+            code: generateRustSchemaDeclaration({ contract, framework, types: schemaIndex.types }),
+          })),
+          ...schemaIndex.stores.map((store) => ({
+            componentId: store.id,
+            framework,
+            code: generateRustStoreDeclaration(store, framework, schemaIndex.types),
+          })),
+        ],
+      watchedFiles: [
+        ...(resolvedRust.manifestPath ? [resolvedRust.manifestPath] : []),
+        resolve(runtimeCrateRoot, "src"),
+        resolve(applicationRoot, configuredSourceRoot),
+        ...resolveRustDependencyRoots(rust, applicationRoot),
       ],
-    watchedFiles: [
-      ...(resolvedRust.manifestPath ? [resolvedRust.manifestPath] : []),
-      resolve(runtimeCrateRoot, "src"),
-      resolve(applicationRoot, configuredSourceRoot),
-      ...resolveRustDependencyRoots(rust, applicationRoot),
-    ],
-    diagnostics,
-    metadata: {
-      buildMode,
+      diagnostics,
+      metadata: {
+        buildMode,
+        abiVersions,
+        wasmBindgenTarget: "web",
+      },
+    };
+    // Complete every fallible artifact read, CSS/declaration transform, and
+    // metadata write before replacing the last successful output.
+    cpSync(workspace.metadata, stagingMetadata);
+    writeWorkspaceMetadata({ ...workspace, metadata: stagingMetadata }, {
       abiVersions,
-      wasmBindgenTarget: "web",
-    },
-  };
+      toolchain: {
+        cargo: toolchain.cargo.version,
+        rustc: toolchain.rustc.version,
+        target: toolchain.target.triple,
+        wasmBindgen: toolchain.wasmBindgen.version,
+      },
+    });
+    commitStagedArtifacts([
+      { staging: stagingOutputDir, destination: outputDir },
+      { staging: stagingMetadata, destination: workspace.metadata },
+    ]);
+    return result;
   } catch (cause) {
-    removeDirectory(stagingOutputDir);
+    discardStaging(stagingOutputDir);
+    discardStaging(stagingMetadata);
     throw cause;
   }
 }
@@ -837,77 +848,54 @@ function writeIfChanged(path: string, content: string): void {
   writeFileSync(path, content);
 }
 
-const BUILD_LOCK_TIMEOUT_MS = 30_000;
-const BUILD_LOCK_RETRY_MS = 50;
-
-function acquireBuildLock(workspaceRoot: string): () => void {
-  mkdirSync(workspaceRoot, { recursive: true });
-  const lockPath = resolve(workspaceRoot, ".build.lock");
-  const started = Date.now();
-  while (true) {
-    try {
-      const descriptor = openSync(lockPath, "wx");
-      writeFileSync(descriptor, `${process.pid}\n`);
-      return () => {
-        closeSync(descriptor);
-        try { unlinkSync(lockPath); } catch (cause) {
-          if ((cause as NodeJS.ErrnoException).code !== "ENOENT") throw cause;
-        }
-      };
-    } catch (cause) {
-      if ((cause as NodeJS.ErrnoException).code !== "EEXIST") throw cause;
-      if (isStaleBuildLock(lockPath)) {
-        try { unlinkSync(lockPath); } catch (removeCause) {
-          if ((removeCause as NodeJS.ErrnoException).code !== "ENOENT") throw removeCause;
-        }
-        continue;
-      }
-      if (Date.now() - started >= BUILD_LOCK_TIMEOUT_MS) {
-        throw new VooyaUserError(
-          `Vooya build workspace is busy: ${workspaceRoot}. Another build may still be running; retry after it finishes.`,
-          { kind: "workspace-lock" },
-        );
-      }
-      // Build calls are synchronous, so a short sleep prevents concurrent
-      // Vite/production invocations from deleting each other's source tree.
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, BUILD_LOCK_RETRY_MS);
-    }
-  }
-}
-
-function isStaleBuildLock(lockPath: string): boolean {
-  let owner: number;
-  try {
-    owner = Number.parseInt(readFileSync(lockPath, "utf8"), 10);
-    if (!Number.isInteger(owner) || owner <= 0) return false;
-    process.kill(owner, 0);
-    return false;
-  } catch (cause) {
-    // ESRCH means the owning process exited. EPERM means it still exists but
-    // cannot be inspected, so only treat missing-process errors as stale.
-    return (cause as NodeJS.ErrnoException).code === "ESRCH";
-  }
-}
-
 function createStagingDirectory(outputDir: string): string {
-  const staging = `${outputDir}.staging-${process.pid}-${Date.now()}`;
+  const staging = `${outputDir}.staging-${randomUUID()}`;
   removeDirectory(staging);
   mkdirSync(staging, { recursive: true });
   return staging;
 }
 
-function commitStagedDirectory(staging: string, destination: string): void {
-  const backup = `${destination}.previous-${process.pid}-${Date.now()}`;
+/** Install output and metadata only after all transforms succeed. Keep every backup
+ * until the complete install succeeds so a failed second rename can roll back
+ * the first one as well. This covers build failures, not process/power loss. */
+function commitStagedArtifacts(entries: Array<{ staging: string; destination: string }>): void {
+  const pending = entries.map((entry) => ({
+    ...entry,
+    backup: `${entry.destination}.previous-${randomUUID()}`,
+    backedUp: false,
+    installed: false,
+  }));
   try {
-    if (statIfExists(destination)) renameWithRetry(destination, backup);
-    renameWithRetry(staging, destination);
-  } catch (cause) {
-    if (!statIfExists(destination) && statIfExists(backup)) {
-      try { renameWithRetry(backup, destination); } catch { /* Preserve the original failure. */ }
+    for (const entry of pending) {
+      if (statIfExists(entry.destination)) {
+        renameWithRetry(entry.destination, entry.backup);
+        entry.backedUp = true;
+      }
+      renameWithRetry(entry.staging, entry.destination);
+      entry.installed = true;
     }
+  } catch (cause) {
+    const failures: unknown[] = [cause];
+    for (const entry of [...pending].reverse()) {
+      try {
+        if (entry.installed) removeDirectory(entry.destination);
+        if (entry.backedUp) renameWithRetry(entry.backup, entry.destination);
+      } catch (rollbackCause) {
+        failures.push(new Error(`Could not restore ${entry.destination}; recovery backup: ${entry.backup}`, { cause: rollbackCause }));
+      }
+    }
+    if (failures.length > 1) throw new AggregateError(failures, "Vooya artifact install failed and rollback was incomplete; preserved backups require recovery.");
     throw cause;
   }
-  removeDirectory(backup);
+  // Cleanup must not turn a successfully committed build into a reported
+  // failure after the old output has been removed. Leave busy backups to clean.
+  for (const entry of pending) if (entry.backedUp) discardStaging(entry.backup);
+}
+
+function discardStaging(path: string): void {
+  try { removeDirectory(path); } catch (cause) {
+    process.emitWarning(`Vooya could not remove temporary build output ${path}: ${String(cause)}`);
+  }
 }
 
 function statIfExists(path: string): boolean {
