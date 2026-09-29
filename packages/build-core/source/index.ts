@@ -178,7 +178,9 @@ export function generateRustSourceRoot(
     }
     used.add(identifier);
     const visibility = publicSet.has(file) ? "pub " : "";
-    const attribute = conventional ? "#[allow(non_snake_case)]\n" : `#[path = ${JSON.stringify(relativePath)}]\n`;
+    const attribute = conventional && identifier === sourceName
+      ? "#[allow(non_snake_case)]\n"
+      : `#[path = ${JSON.stringify(relativePath)}]\n`;
     declarations.push(`${attribute}${visibility}mod ${identifier};`);
   }
   return `${declarations.join("\n")}\n`;
@@ -299,6 +301,7 @@ export function resolveRustDependencyRoots(
  * are the parsed `.voo` compiler results; callers retain all bundler-specific IO.
  */
 export function buildApplication(options: BuildApplicationOptions): BuildApplicationResult {
+  if (!options.applicationRoot) throw new Error("Vooya build requires applicationRoot.");
   const workspace = resolveVooyaWorkspace(options.applicationRoot, options.workspaceRoot);
   const release = acquireBuildLock(workspace.root);
   try {
@@ -323,7 +326,6 @@ function buildApplicationUnlocked({
   spawn = spawnSync,
   exec = execFileSync,
 }: BuildApplicationOptions): BuildApplicationResult {
-  if (!applicationRoot) throw new Error("Vooya build requires applicationRoot.");
   const resolvedRust = resolveRustBuildOptions(applicationRoot, rust);
   rust = resolvedRust.rust;
   const workspace = resolveVooyaWorkspace(applicationRoot, workspaceRoot);

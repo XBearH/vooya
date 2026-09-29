@@ -77,6 +77,23 @@ web-sys = { version = "0.3", features = ["HtmlCanvasElement"] }
   }
 });
 
+test("buildApplication rejects missing applicationRoot before creating a workspace", () => {
+  const root = mkdtempSync(resolve(tmpdir(), "vooya-invalid-build-root-"));
+  try {
+    for (const applicationRoot of [undefined, null, ""]) {
+      assert.throws(() => buildApplication({
+        applicationRoot,
+        workspaceRoot: resolve(root, "workspace"),
+        runtimeCrateRoot: root,
+        toolchain: {},
+      }), { message: "Vooya build requires applicationRoot." });
+      assert.deepEqual(readdirSync(root), []);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("buildApplication writes inherited Cargo defaults into the generated crate", () => {
   const root = mkdtempSync(resolve(tmpdir(), "vooya-cargo-build-"));
   const workspaceRoot = resolve(root, ".vooya");
@@ -394,6 +411,14 @@ test("generates a conventional authored root for multi-file Rust modules", () =>
   assert.match(root, /#\[allow\(non_snake_case\)\]\npub mod MathPlot;/);
   assert.match(root, /#\[allow\(non_snake_case\)\]\nmod components;/);
   assert.doesNotMatch(root, /spec|MathLab/);
+});
+
+test("renamed Rust modules retain their authored path after an identifier collision", () => {
+  const root = generateRustSourceRoot([
+    "rust/src/a-b.rs",
+    "rust/src/a_b.rs",
+  ], ["rust/src/a_b.rs"], "rust/src");
+  assert.equal(root, '#[path = "a-b.rs"]\nmod a_b;\n#[path = "a_b.rs"]\npub mod a_b_2;\n');
 });
 
 test("discovers ordinary Rust modules while excluding crate roots", () => {
