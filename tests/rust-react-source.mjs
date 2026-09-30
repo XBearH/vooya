@@ -52,7 +52,7 @@ async function verifyBrowser() {
     await page.getByRole("button", { name: "Store 0 / 0" }).click();
     await page.getByRole("button", { name: "Store 1 / 1" }).waitFor();
     await page.getByRole("button", { name: "Count: 1" }).waitFor();
-    await page.getByText("Selected 1").waitFor();
+    await page.getByText("Selected 1 selected,react").waitFor();
     if (errors.length > 0) throw new Error(`Rust-file React fixture had browser errors:\n${errors.join("\n")}`);
   } finally {
     await browser.close();
@@ -80,7 +80,7 @@ function availablePort() {
 }
 
 function run(command, args, cwd) {
-  const result = spawnSync(command, args, { cwd, stdio: "inherit" });
+  const result = spawnSync(command, args, { cwd, stdio: "inherit", shell: process.platform === "win32" });
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`${command} ${args.join(" ")} failed with exit code ${result.status}.`);
 }

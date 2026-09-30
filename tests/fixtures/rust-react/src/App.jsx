@@ -9,8 +9,8 @@ export function App() {
   const itemCount = state?.totals.item_count ?? 0;
   return (
     <main>
-      <Counter count={count} onSelected={setSelected} />
-      <span className="selected">Selected {selected}</span>
+      <Counter count={count} selection={{ id: 1, tags: ["selected", "react"] }} onSelected={setSelected} />
+      <span className="selected">Selected {selected?.id} {selected?.tags.join(",")}</span>
       <button className="store-add" onClick={() => add(1)}>Store {count} / {itemCount}</button>
     </main>
   );

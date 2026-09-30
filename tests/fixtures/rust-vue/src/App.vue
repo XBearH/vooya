@@ -6,7 +6,7 @@ import { ref } from "vue";
 
 const { state, add } = useCart();
 const cartDetails = (): number => state.value?.totals.item_count ?? 0;
-const selected = ref<number | null>(null);
+const selected = ref<{ id: number; tags: string[] } | null>(null);
 const abiPayload = ref("none");
 const abiProps = {
   small: 3,
@@ -20,7 +20,7 @@ function addItem() {
   add(1);
 }
 
-function handleSelected(value: number) {
+function handleSelected(value: { id: number; tags: string[] }) {
   selected.value = value;
 }
 
@@ -32,7 +32,7 @@ function handleAbiPayload(value: bigint) {
 <template>
   <Abi v-bind="abiProps" @payload="handleAbiPayload" />
   <span class="abi-output">ABI payload {{ abiPayload }}</span>
-  <Counter :count="state?.count ?? 0" @selected="handleSelected" />
-  <span class="selected">Selected {{ selected }}</span>
+  <Counter :count="state?.count ?? 0" :selection="{ id: 1, tags: ['selected', 'vue'] }" @selected="handleSelected" />
+  <span class="selected">Selected {{ selected?.id }} {{ selected?.tags.join(',') }}</span>
   <button class="store-add" @click="addItem">Store {{ state?.count ?? 0 }} / {{ cartDetails() }}</button>
 </template>

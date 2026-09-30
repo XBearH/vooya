@@ -64,7 +64,7 @@ async function verifyBrowser() {
     await page.getByText("ABI payload 9007199254740993").waitFor();
     const counter = page.getByRole("button", { name: "Count: 1" });
     await counter.waitFor();
-    await page.getByText("Selected 1").waitFor();
+    await page.getByText("Selected 1 selected,vue").waitFor();
     if (await counter.evaluate((element) => getComputedStyle(element).display) !== "flex") {
       throw new Error("Rust-file scoped CSS was not applied to the component root.");
     }
@@ -88,7 +88,7 @@ function availablePort() {
 }
 
 function run(command, args, cwd) {
-  const result = spawnSync(command, args, { cwd, stdio: "inherit" });
+  const result = spawnSync(command, args, { cwd, stdio: "inherit", shell: process.platform === "win32" });
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`${command} ${args.join(" ")} failed with exit code ${result.status}.`);
 }
