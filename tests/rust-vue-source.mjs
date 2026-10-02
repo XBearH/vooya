@@ -54,17 +54,22 @@ async function verifyBrowser() {
   const browser = await chromium.launch({ headless: true });
   try {
     const page = await browser.newPage();
+    page.setDefaultTimeout(15_000);
     const errors = [];
     page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
     page.on("pageerror", (error) => errors.push(error.message));
     await page.goto(`http://127.0.0.1:${port}`, { waitUntil: "domcontentloaded" });
-    await page.getByRole("button", { name: "Store 0 / 0" }).click();
-    await page.getByRole("button", { name: "Store 1 / 1" }).waitFor();
+    await page.getByText("Selected 0 selected,vue", { exact: true }).waitFor();
     await page.getByRole("button", { name: /ABI 3 9007199254740993 none 7 2/ }).waitFor();
     await page.getByText("ABI payload 9007199254740993").waitFor();
-    const counter = page.getByRole("button", { name: "Count: 1" });
-    await counter.waitFor();
-    await page.getByText("Selected 1 selected,vue").waitFor();
+    // Check fresh events after two updates, not only the initial mount payload.
+    for (const count of [1, 2]) {
+      await page.getByRole("button", { name: `Store ${count - 1} / ${count - 1}`, exact: true }).click();
+      await page.getByRole("button", { name: `Store ${count} / ${count}`, exact: true }).waitFor();
+      await page.getByRole("button", { name: `Count: ${count}`, exact: true }).waitFor();
+      await page.getByText(`Selected ${count} selected,vue`, { exact: true }).waitFor();
+    }
+    const counter = page.getByRole("button", { name: "Count: 2", exact: true });
     if (await counter.evaluate((element) => getComputedStyle(element).display) !== "flex") {
       throw new Error("Rust-file scoped CSS was not applied to the component root.");
     }
