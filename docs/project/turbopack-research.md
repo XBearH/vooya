@@ -1,33 +1,31 @@
 # Turbopack Research
 
 This post-beta research record addresses [Issue #38](https://github.com/vooyajs/vooya/issues/38).
-It does not add a Turbopack compatibility claim, a Next.js adapter, or a
-Turbopack entry in the compatibility matrix.
+It does not add a Turbopack compatibility claim or a Next.js adapter.
 
 ## Result
 
-The documented Next.js/Turbopack extension surface is insufficient for the
-current Vooya source-build contract. A Turbopack rule can invoke a loader that
-returns JavaScript for a matching source file, but the documented loader
-surface cannot coordinate the Rust/WASM build and assets that Vooya requires.
+Vooya does not yet have a verified Turbopack source-authoring integration.
+The documented loader API does not support `emitFile`, which prevents reusing
+Vooya's existing loader-side asset emission unchanged. A complete alternative
+for shared Rust builds and generated assets has not been demonstrated here.
 
-The smallest viable future boundary needs documented public hooks that can run
-one shared build, emit its generated assets, register watched files, and report
-recoverable mapped diagnostics. Until those hooks exist, an integration would
-need undocumented or patched internals, an external daemon/file-copy protocol,
-or an asset path outside the normal production graph.
+This is a limitation of the investigated integration path, not proof that
+Turbopack cannot support Vooya. Dependency registration and resolution already
+exist. The remaining work is to test whether those capabilities can support a
+coherent build, asset, invalidation, and failure-recovery design.
 
 ## Investigated Boundary
 
-The relevant documented Next.js configuration shape maps a source file to a
-loader that returns JavaScript:
+Next.js supports rules that invoke a loader returning JavaScript. For current
+Rust-file authoring, the configuration shape would be:
 
 ```js
-// next.config.js
+// next.config.js — illustrative rule, not a working Vooya integration
 module.exports = {
   turbopack: {
     rules: {
-      "*.voo": {
+      "*.rs": {
         loaders: ["./vooya-loader.js"],
         as: "*.js",
       },
@@ -36,64 +34,68 @@ module.exports = {
 };
 ```
 
-The API was reviewed against the [Next.js Turbopack configuration
-reference](https://nextjs.org/docs/app/api-reference/config/next-config-js/turbopack)
-for Next.js `16.3.6`. Turbopack is distributed with Next.js and does not expose
-a standalone version in this repository. The investigation environment used
-Node.js `v24.12.0`, npm `11.6.2`, and React `19.x` repository consumers.
+No `vooya-loader.js` is supplied by this research. The rule alone does not
+establish that generated WASM or runtime assets enter the application output.
 
-This shape could transform source text into a client-side React module. It does
-not establish that generated WASM, CSS, runtime JavaScript, declarations, or
-ABI metadata enter the application output.
+The implementation evidence below is pinned to Next.js `16.3.6`, whose
+Turbopack loader bridge is part of the Next.js source tree. The [official
+configuration reference](https://nextjs.org/docs/app/api-reference/config/next-config-js/turbopack)
+was also checked on 2026-10-02; that live page then showed version `16.3.8`.
+This document records an API and source review, not a clean Next.js consumer
+build or browser compatibility test.
 
-## Public API Blockers
+## Established Capabilities And Limits
 
-Vooya's shared build result contains runtime JavaScript, WASM, generated CSS,
-declarations, metadata, watched files, and mapped diagnostics. Existing Vite,
-Webpack, and Rspack integrations invoke that build from a bundler lifecycle,
-not independently for every imported source module.
+- The official reference lists `emitFile` as unsupported. A loader cannot use
+  that API to publish Vooya's generated WASM into the production asset graph.
+- The Next.js `16.3.6` [loader bridge](https://github.com/vercel/next.js/blob/v16.3.6/turbopack/crates/turbopack-node/js/src/transforms/webpack-loaders.ts#L543-L549)
+  forwards `fileDependencies` and `contextDependencies` from loader execution
+  to Turbopack. It is incorrect to describe this boundary as having no file or
+  directory dependency registration.
+- The same implementation provides [getResolve](https://github.com/vercel/next.js/blob/v16.3.6/turbopack/crates/turbopack-node/js/src/transforms/webpack-loaders.ts#L218).
+  The documentation's unsupported callback-style `this.resolve` does not mean
+  all loader-context resolution is absent.
+- The official reference also lists `importModule` and `loadModule` as
+  unsupported and describes partial `fs` support. These constrain an adapter
+  design; by themselves they do not prove that every design is impossible.
 
-The documented Turbopack loader boundary has these gaps:
+These are capabilities and limits of the inspected loader boundary. They do
+not verify Vooya's Cargo dependency graph, browser reload behavior, or asset
+publication through that boundary.
 
-- `emitFile` is unsupported, so the loader cannot emit generated WASM into the
-  normal production asset graph.
-- There is no documented compilation or plugin lifecycle hook equivalent to
-  the hooks used by the existing Webpack and Rspack integrations to run one
-  coordinated Rust/WASM build and publish its generated assets.
-- The loader API does not expose repository-level watch registration for the
-  shared build's Rust source and path-dependency watch roots.
-- The documented surface does not provide the complete rebuild, failed-build
-  recovery, and mapped-diagnostic lifecycle used by the current adapters.
-- Partial `fs` support and missing loader features including `importModule`,
-  `loadModule`, and loader-context `resolve` prevent a clean replacement for
-  the adapter state model.
+## Integration Questions Still Open
 
-Copying WASM beside source files or serving it through an unrelated endpoint is
-not equivalent to normal bundler asset emission. It would not meet the source
-integration contract. Using private Next.js/Turbopack internals is outside this
-research boundary.
+Vooya builds shared runtime JavaScript and WASM for multiple Rust imports. Its
+build also produces CSS, declarations, contract metadata, watched inputs, and
+mapped diagnostics. A future adapter must establish:
 
-## Production And Development
+- **Build coordination:** one coherent build for concurrent imports, without
+  duplicate Cargo work or partially published output. The loader bridge does
+  not by itself demonstrate the compilation lifecycle used by the current
+  Webpack and Rspack integrations.
+- **Production assets:** a supported path for generated JS, WASM, and CSS,
+  with correct URLs and cache behavior. Unsupported `emitFile` rules out that
+  specific mechanism; another asset-graph design needs a fixture. Declarations
+  and build metadata need an explicit owner as well, rather than assuming all
+  outputs are browser assets.
+- **Development invalidation:** registration of actual Rust files and Cargo
+  path-dependency directories, including edits, additions, and removals. The
+  existing dependency bridge is a starting point, not evidence that Vooya's
+  whole watch graph has been integrated.
+- **Failure and recovery:** mapped Rust diagnostics, cleanup after failure,
+  corrected-source rebuilds without a server restart, and consistent browser
+  invalidation when a shared build changes.
 
-The paths have different blockers:
-
-- **Production:** JavaScript transformation is representable by a loader, but
-  generated WASM, CSS, runtime assets, declarations, and ABI metadata cannot be
-  emitted through the documented API.
-- **Development:** even if an external workaround copied production assets, the
-  public loader rule does not provide watched-root registration, rebuild
-  scheduling, failed-build recovery, or browser invalidation for Rust source
-  and configured path dependencies.
-
-No clean Next.js fixture or automated compatibility row is added because those
-requirements cannot be verified through documented public extension points.
-Webpack and Rspack evidence remains evidence for those bundlers only.
+Copying files to an unrelated endpoint would need its own URL, cache, and
+lifecycle contract. It cannot be counted as normal bundler asset integration
+without testing that contract. Private patches are not evidence of a supported
+public extension path.
 
 ## Reproduction Gate
 
-Revisit this conclusion only when Turbopack exposes the missing public hooks.
-The next investigation must use a clean Next.js consumer, record exact
-installed versions, and run:
+A focused experiment can investigate these questions using the existing APIs;
+it need not wait for watch registration or resolution to be invented. Start
+with a clean Next.js consumer and record exact installed versions:
 
 ```sh
 node --version
@@ -104,8 +106,12 @@ npm run build
 npm run start
 ```
 
-The fixture must import a local source component from a client component and
-verify production asset emission, browser WASM initialization, mount, prop
+The fixture must import a local `.rs` component from a client component and
+verify production asset loading, browser WASM initialization, mount, prop
 update, event delivery, and disposal. Development must additionally verify
 Rust and path-dependency watching, mapped diagnostics, failed-build recovery,
 and a corrected source edit without restarting the server.
+
+Until that evidence exists, Turbopack remains outside the support matrix.
+Passing Webpack, Rspack, or an API-source inspection is not a substitute for
+this consumer test.

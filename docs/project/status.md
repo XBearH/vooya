@@ -106,7 +106,7 @@ See [the release guide](../maintainers/releases.md).
 - Vite+ has a compatibility smoke path because it aliases Vite to its bundled
   Vite core; it is not a separate Vooya bundler integration or a promise that
   every Vite+ workflow is supported.
-- Turbopack has no compatibility claim. Its documented public API blocker is
+- Turbopack has no compatibility claim. Its loader API evidence and unverified integration requirements are
   recorded in [Turbopack research](turbopack-research.md); Webpack and Rspack
   evidence must not be generalized to Turbopack.
 - No precompiled component product is currently published; the retained Vue

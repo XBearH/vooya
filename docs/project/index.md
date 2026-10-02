@@ -9,8 +9,8 @@ passing fixture is not mistaken for a broad support promise.
 - [Status](./status.md): what the current beta can do and where it is limited.
 - [Compatibility matrix](./compatibility.md): framework, bundler, browser, and
   toolchain evidence.
-- [Turbopack research](./turbopack-research.md): the documented public API
-  blocker for a future Next.js source integration.
+- [Turbopack research](./turbopack-research.md): loader API evidence and open
+  integration questions for a future Next.js source integration.
 - [Language provider research](./language-provider-research.md): the post-beta
   provider and normalized artifact boundary; Rust remains the only beta source
   language.
