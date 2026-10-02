@@ -11,6 +11,8 @@ passing fixture is not mistaken for a broad support promise.
   toolchain evidence.
 - [Lab self-hosting program](../rfcs/0011-lab-self-hosting-program.md): the
   ongoing evidence and ownership loop between this repository and Vooya Lab.
+- [Turbopack research](./turbopack-research.md): loader API evidence and open
+  integration questions for a future Next.js source integration.
 - [Language provider research](./language-provider-research.md): the post-beta
   provider and normalized artifact boundary; Rust remains the only beta source
   language.
