@@ -1,6 +1,10 @@
 # RFC 0011: Vooya Lab alpha self-hosting program
 
-Status: accepted alpha program.
+Status: accepted self-hosting program, established during alpha.
+
+The program continues to collect evidence during beta; this record does not
+change the current release status or the support matrix. Execution remains
+tracked in [Issue #103](https://github.com/vooyajs/vooya/issues/103).
 
 ## Decision
 
@@ -29,7 +33,8 @@ case question -> ordinary consumer implementation -> recorded friction
   -> remove workaround -> repeatable evidence
 ```
 
-A case contract belongs in `vooyajs/vooya-lab` and includes its domain and
+The [case contract](https://github.com/vooyajs/vooya-lab/blob/main/docs/case-spec.md)
+belongs in `vooyajs/vooya-lab` and includes its domain and
 maturity, required browser capabilities and deployment headers, package/crate
 inputs, presented source files, lifecycle behavior, known limitations, linked
 issues, and any meaningful plain-Web baseline. The gallery remains oriented
@@ -84,8 +89,10 @@ framework.
 
 ## Acceptance Criteria
 
-- The Lab case specification and portfolio strategy remain the public starting
-  point for new cases.
+- The Lab [case specification](https://github.com/vooyajs/vooya-lab/blob/main/docs/case-spec.md)
+  and [portfolio strategy](https://github.com/vooyajs/vooya-lab/blob/main/docs/case-portfolio.md)
+  remain the public starting point for new cases. The case schema is maintained
+  there; this record defines the ownership and evidence boundary.
 - Every Core finding has a focused issue or documented reason to remain an
   experiment.
 - Compatibility claims continue to require named automated evidence in this

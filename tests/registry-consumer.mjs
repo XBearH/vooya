@@ -1,93 +1,136 @@
 import { spawnSync } from "node:child_process";
-import { cpSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { cpSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync } from "node:fs";
+import { createServer } from "node:http";
 import { tmpdir } from "node:os";
-import { resolve } from "node:path";
+import { extname, isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { chromium } from "playwright";
+import { parseRegistryArguments, registryPackages, verifyPackedLockfile, verifyPackedSnapshot, verifyRegistryLockfile, verifyRegistrySnapshot } from "./helpers/registry-release-contract.mjs";
 
-// This is deliberately separate from the local-tarball quickstart test. It
-// proves only what is already published under an npm dist-tag; uncommitted
-// workspace code must not be able to satisfy any dependency here.
+// Registry mode installs only published npm packages. Packed mode is an explicit
+// prepublication rehearsal of the same consumer, with different provenance checks.
 const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
-const tag = process.env.VOOYA_REGISTRY_TAG ?? "alpha";
-const temporaryRoot = mkdtempSync(resolve(tmpdir(), "vooya-registry-consumer-"));
+const { expectedRoot, packDir, tag } = parseRegistryArguments(process.argv.slice(2), process.env);
+const temporaryRoot = realpathSync(mkdtempSync(resolve(tmpdir(), "vooya-registry-consumer-")));
 
 try {
-  const versions = publishedVersions(tag);
-  verifyFixedRelease(versions, tag);
-  verifyConsumer("vue", versions);
-  verifyConsumer("react", versions);
+  const snapshot = packDir ? packedSnapshot(resolve(packDir)) : publishedSnapshot(tag);
+  const expected = expectedRoot ? Object.fromEntries(registryPackages.map((name) => [
+    `@vooya/${name}`, JSON.parse(readFileSync(resolve(expectedRoot, "packages", name, "package.json"), "utf8")),
+  ])) : undefined;
+  const versions = packDir ? verifyPackedSnapshot(snapshot, expected) : verifyRegistrySnapshot(snapshot, tag, expected);
+  for (const framework of ["vue", "react"]) await verifyConsumer(framework, versions, snapshot);
 } finally {
-  if (!process.env.VOOYA_KEEP_REGISTRY_FIXTURE) {
-    rmSync(temporaryRoot, { force: true, recursive: true });
+  if (!process.env.VOOYA_KEEP_REGISTRY_FIXTURE) rmSync(temporaryRoot, { force: true, recursive: true });
+  else console.log(`Preserved consumer fixtures: ${temporaryRoot}`);
+}
+
+function publishedSnapshot(tag) {
+  return Object.fromEntries(registryPackages.map((name) => [
+    `@vooya/${name}`, JSON.parse(capture("npm", ["view", `@vooya/${name}@${tag}`, "--json", "--registry=https://registry.npmjs.org/"], repositoryRoot)),
+  ]));
+}
+
+function packedSnapshot(directory) {
+  const snapshot = {};
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    if (!entry.isFile() || !entry.name.endsWith(".tgz")) continue;
+    const path = realpathSync(resolve(directory, entry.name));
+    const manifest = JSON.parse(capture("tar", ["-xOf", path, "package/package.json"], directory));
+    if (!registryPackages.some((name) => manifest.name === `@vooya/${name}`)) continue;
+    if (snapshot[manifest.name]) throw new Error(`Duplicate candidate tarball for ${manifest.name}.`);
+    snapshot[manifest.name] = {
+      ...manifest,
+      packedPath: path,
+      dist: { integrity: `sha512-${createHash("sha512").update(readFileSync(path)).digest("base64")}` },
+    };
   }
+  return snapshot;
 }
 
-function publishedVersions(tag) {
-  return Object.fromEntries(
-    ["compiler", "core", "build-core", "vite", "vue", "react"].map((name) => [
-      name,
-      npmView(`@vooya/${name}@${tag}`, "version"),
-    ]),
-  );
-}
-
-function verifyFixedRelease(versions, tag) {
-  const distinct = [...new Set(Object.values(versions))];
-  if (distinct.length !== 1) {
-    throw new Error(`npm dist-tag ${JSON.stringify(tag)} does not resolve Vooya's fixed release group: ${JSON.stringify(versions)}.`);
-  }
-}
-
-function verifyConsumer(framework, versions) {
+async function verifyConsumer(framework, versions, snapshot) {
   const project = resolve(temporaryRoot, framework);
-  cpSync(resolve(repositoryRoot, `tests/fixtures/quickstart-${framework}`), project, { recursive: true });
-  const adapter = `@vooya/${framework}`;
-  const plugin = "@vooya/vite";
-  const version = versions[framework];
-
-  run("npm", [
-    "install", "--ignore-scripts", "--no-audit", "--no-fund", "--save-exact",
-    `${adapter}@${version}`, `${plugin}@${versions["vite"]}`,
-  ], project);
-  verifyRegistryLockfile(project, framework, versions);
+  cpSync(resolve(repositoryRoot, `tests/fixtures/registry-${framework}`), project, { recursive: true });
+  cpSync(resolve(repositoryRoot, "tests/fixtures/registry-rust"), resolve(project, "src"), { recursive: true });
+  const packages = packDir
+    ? ["compiler", "core", "build-core", "vite", framework].map((name) => snapshot[`@vooya/${name}`].packedPath)
+    : [`@vooya/${framework}@${versions[framework]}`, `@vooya/vite@${versions.vite}`];
+  run("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund", "--save-exact", "--registry=https://registry.npmjs.org/", ...packages], project);
+  const lockfile = JSON.parse(readFileSync(resolve(project, "package-lock.json"), "utf8"));
+  if (packDir) verifyPackedLockfile(lockfile, framework, snapshot, project);
+  else verifyRegistryLockfile(lockfile, framework, snapshot);
   run("npm", ["exec", "--no", "--", "vooya", "doctor"], project);
+  // Build generates declarations; typecheck then checks both authored consumers
+  // and installed/generated declarations with skipLibCheck explicitly disabled.
   run("npm", ["run", "build"], project);
-
+  run("npm", ["run", "typecheck"], project);
   const assets = readdirSync(resolve(project, "dist/assets"));
   if (!assets.some((asset) => /^vooya_app_bg-.*\.wasm$/.test(asset))) {
-    throw new Error(`${framework} registry consumer build did not emit the application WASM asset.`);
+    throw new Error(`${framework} consumer build did not emit the application WASM asset.`);
   }
-  console.log(`Verified published ${version} ${framework} consumer from npm registry: ${project}`);
+  await verifyBrowser(project, framework);
+  console.log(`Verified ${packDir ? "packed candidate" : `npm ${tag}`} @vooya/${framework}@${versions[framework]} with @vooya/vite@${versions.vite}: doctor, strict types, Rust component/store build, Chromium interaction and unmount/remount.`);
 }
 
-function verifyRegistryLockfile(project, framework, versions) {
-  const lockfile = JSON.parse(readFileSync(resolve(project, "package-lock.json"), "utf8"));
-  const expected = {
-    "@vooya/compiler": versions.compiler,
-    "@vooya/core": versions.core,
-    "@vooya/vite": versions["vite"],
-    [`@vooya/${framework}`]: versions[framework],
-  };
-  for (const [name, version] of Object.entries(expected)) {
-    const entry = lockfile.packages?.[`node_modules/${name}`];
-    if (!entry || entry.version !== version) {
-      throw new Error(`Registry ${framework} consumer resolved ${name}@${entry?.version ?? "missing"}, expected published ${version}.`);
-    }
-    if (!entry.resolved?.startsWith("https://registry.npmjs.org/")) {
-      throw new Error(`Registry ${framework} consumer did not lock ${name} to npm registry: ${entry.resolved ?? "missing resolution"}.`);
-    }
+async function verifyBrowser(project, framework) {
+  const dist = resolve(project, "dist");
+  const server = createServer((request, response) => {
+    const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
+    const file = resolve(dist, pathname === "/" ? "index.html" : pathname.slice(1));
+    const path = relative(dist, file);
+    if (isAbsolute(path) || path.startsWith("..")) { response.writeHead(403).end(); return; }
+    try {
+      response.setHeader("Content-Type", { ".wasm": "application/wasm", ".js": "text/javascript", ".css": "text/css", ".html": "text/html" }[extname(file)] ?? "application/octet-stream");
+      response.end(readFileSync(file));
+    } catch { response.writeHead(404).end(); }
+  });
+  await new Promise((done, fail) => { server.once("error", fail); server.listen(0, "127.0.0.1", done); });
+  let browser;
+  try {
+    browser = await chromium.launch({ headless: true });
+    const page = await browser.newPage();
+    page.setDefaultTimeout(15_000);
+    const errors = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
+    await page.goto(`http://127.0.0.1:${server.address().port}`, { waitUntil: "networkidle" });
+    await page.getByRole("button", { name: "Count: 0", exact: true }).waitFor();
+    await page.getByRole("button", { name: "Store 0", exact: true }).click();
+    const counter = page.getByRole("button", { name: "Count: 1", exact: true });
+    await counter.waitFor();
+    await page.getByText("Selected 1", { exact: true }).waitFor();
+    if (await counter.evaluate((element) => getComputedStyle(element).display) !== "flex") throw new Error(`${framework} Rust scoped CSS was not applied.`);
+    await page.getByRole("button", { name: "Store 1", exact: true }).click();
+    await page.getByRole("button", { name: "Count: 2", exact: true }).waitFor();
+    await page.getByRole("button", { name: "Reset", exact: true }).click();
+    await page.getByRole("button", { name: "Count: 0", exact: true }).waitFor();
+    await page.getByRole("button", { name: "Store 0", exact: true }).click();
+    await page.getByRole("button", { name: "Count: 1", exact: true }).waitFor();
+    await page.getByRole("button", { name: "Unmount", exact: true }).click();
+    await page.getByTestId("island").waitFor({ state: "detached" });
+    await page.getByRole("button", { name: "Mount", exact: true }).click();
+    await page.getByRole("button", { name: "Count: 0", exact: true }).waitFor();
+    await page.getByRole("button", { name: "Store 0", exact: true }).click();
+    await page.getByText("Selected 1", { exact: true }).waitFor();
+    await page.getByRole("button", { name: "Unmount", exact: true }).click();
+    await page.getByTestId("island").waitFor({ state: "detached" });
+    if (errors.length) throw new Error(`${framework} consumer browser errors:\n${errors.join("\n")}`);
+  } finally {
+    if (browser) await browser.close();
+    await new Promise((done, fail) => server.close((error) => error ? fail(error) : done()));
   }
 }
 
-function npmView(spec, field) {
-  const result = spawnSync("npm", ["view", spec, field, "--json"], { encoding: "utf8" });
+function commandName(command) { return process.platform === "win32" && command === "npm" ? "npm.cmd" : command; }
+function capture(command, args, cwd) {
+  const result = spawnSync(commandName(command), args, { cwd, encoding: "utf8", shell: process.platform === "win32" && command === "npm" });
   if (result.error) throw result.error;
-  if (result.status !== 0) throw new Error(`npm view ${spec} ${field} failed:\n${result.stderr || result.stdout}`);
-  return JSON.parse(result.stdout);
+  if (result.status !== 0) throw new Error(`${command} ${args.join(" ")} failed:\n${result.stderr || result.stdout}`);
+  return result.stdout;
 }
-
 function run(command, args, cwd) {
-  const result = spawnSync(command, args, { cwd, stdio: "inherit" });
+  const result = spawnSync(commandName(command), args, { cwd, stdio: "inherit", shell: process.platform === "win32" && command === "npm" });
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`${command} ${args.join(" ")} failed with exit code ${result.status}.`);
 }

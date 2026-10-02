@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/@vooya/vite"><img src="https://img.shields.io/npm/v/@vooya/vite/alpha?label=alpha" alt="npm alpha version"></a>
+  <a href="https://www.npmjs.com/package/@vooya/vite"><img src="https://img.shields.io/npm/v/@vooya/vite/beta?label=beta" alt="npm beta version"></a>
   <a href="https://github.com/vooyajs/vooya/actions/workflows/verify.yml"><img src="https://github.com/vooyajs/vooya/actions/workflows/verify.yml/badge.svg?branch=main" alt="build status"></a>
   <a href="LICENSE-MIT"><img src="https://img.shields.io/github/license/vooyajs/vooya" alt="license"></a>
   <a href="https://deepwiki.com/vooyajs/vooya"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
@@ -34,12 +34,20 @@ Vooya generates the framework adapter, TypeScript declarations, WASM lifecycle,
 event forwarding, and diagnostic mappings.
 
 > [!IMPORTANT]
-> Vooya is a public alpha. Rust-file (`.rs`) authoring targets Vite `>=7 <9`, with
+> Vooya is a public beta. Rust-file (`.rs`) authoring targets Vite `>=7 <9`.
 > Rspack `>=2.1.10` and Webpack `>=5` currently have transitional fixture
 > evidence only, not a supported Rust-file authoring path. The retired `.voo`
 > format remains in regression fixtures only. Source authoring requires a local
 > Rust/WASM toolchain.
-> Published alpha APIs may still change.
+> Published beta APIs may still change.
+
+`0.1.0-beta.0` is published for all ten public packages, including Vue, React,
+Solid, and Svelte. Install from the npm `beta` channel. Vue and React are the
+supported paths; Solid and Svelte remain experimental, with Vite 7 + Chromium
+evidence. Publishing an adapter does not imply framework-wide compatibility.
+See the [framework capability matrix](docs/project/compatibility.md#beta-framework-capabilities).
+Subsequent releases use independent package versions and exact internal
+dependencies; see the [release guide](docs/maintainers/releases.md).
 
 ## Why Vooya?
 
@@ -85,7 +93,7 @@ runtime and compatibility promises separate.
 - Node.js `^20.19.0` or `>=22.12.0`;
 - a current stable Rust toolchain managed by [rustup](https://rustup.rs/);
 - the `wasm32-unknown-unknown` target;
-- `wasm-bindgen-cli` `0.2.115` for the current alpha.
+- `wasm-bindgen-cli` `0.2.115` for the current beta.
 
 ```sh
 rustup target add wasm32-unknown-unknown
@@ -94,7 +102,7 @@ cargo install wasm-bindgen-cli --version 0.2.115 --locked
 
 ### 2. Create a Vite application
 
-The current Vooya alpha requires Vite `>=7`. This guide pins the currently
+The current Vooya beta requires Vite `>=7`. This guide pins the currently
 verified Vite 8 toolchain so the generated project matches the example.
 
 Using npm:
@@ -103,8 +111,8 @@ Using npm:
 npm create vite@8 vooya-demo -- --template vue-ts
 cd vooya-demo
 npm install
-npm install @vooya/vue@alpha
-npm install --save-dev @vooya/vite@alpha
+npm install @vooya/vue@beta
+npm install --save-dev @vooya/vite@beta
 ```
 
 Using pnpm:
@@ -113,8 +121,8 @@ Using pnpm:
 pnpm create vite@8 vooya-demo --template vue-ts
 cd vooya-demo
 pnpm install
-pnpm add @vooya/vue@alpha
-pnpm add --save-dev @vooya/vite@alpha
+pnpm add @vooya/vue@beta
+pnpm add --save-dev @vooya/vite@beta
 ```
 
 If pnpm reports that the `esbuild` install script was blocked, run
@@ -221,8 +229,8 @@ Create a Vite 8 React project and install the React adapter:
 npm create vite@8 vooya-react-demo -- --template react-ts
 cd vooya-react-demo
 npm install
-npm install @vooya/react@alpha
-npm install --save-dev @vooya/vite@alpha
+npm install @vooya/react@beta
+npm install --save-dev @vooya/vite@beta
 ```
 
 Use the React mode in `vite.config.ts`:
@@ -252,8 +260,8 @@ export default function App() {
 Install the experimental Solid adapter in an existing Vite + Solid project:
 
 ```sh
-npm install @vooya/solid@alpha
-npm install --save-dev @vooya/vite@alpha
+npm install @vooya/solid@beta
+npm install --save-dev @vooya/vite@beta
 ```
 
 Select it after `vite-plugin-solid`:
@@ -285,8 +293,8 @@ export function CartButton() {
 Install the experimental Svelte 5 adapter and Vite integration:
 
 ```sh
-npm install @vooya/svelte@alpha
-npm install --save-dev @vooya/vite@alpha
+npm install @vooya/svelte@beta
+npm install --save-dev @vooya/vite@beta
 ```
 
 Configure the Svelte plugin before Vooya:
@@ -411,7 +419,7 @@ Current boundaries:
 - Webpack 5 support is experimental; Webpack 4, Turbopack, Rollup, SSR, and
   hydration are not supported;
 - successful Rust HMR currently performs a full reload and loses local state;
-- component contracts are intentionally limited and will evolve during alpha;
+- component contracts are intentionally limited and may change during prereleases;
 - the precompiled artifact path is not yet a published component product.
 
 See the [project status](docs/project/status.md) and
@@ -445,7 +453,10 @@ npm run dev:trace     # trace-waterfall interaction case
 ```
 
 Repository development also requires the Rust target and pinned wasm-bindgen
-CLI shown in the quick start above.
+CLI shown in the quick start above. Maintainer release tooling uses Changesets
+3.0.3. Use the CI Node.js 22/npm 10.9.x combination when updating the lockfile or
+preparing releases; see the [release guide](docs/maintainers/releases.md).
+The consumer requirements in the quick start remain unchanged.
 
 ## Packages
 
@@ -462,8 +473,13 @@ CLI shown in the quick start above.
 | [`@vooya/solid`](packages/solid) | Experimental Solid owner, event, and reactive Store adapter |
 | [`@vooya/svelte`](packages/svelte) | Experimental Svelte 5 lifecycle, callback, and Readable Store adapter |
 
-All public packages use one coordinated alpha version. Install the framework
-adapter and selected bundler integration from the same `alpha` channel.
+Public packages are versioned independently with exact internal dependencies. Install the framework
+adapter and selected bundler integration from the same `beta` channel.
+Changesets generates per-package changelogs through a release PR. The **Release**
+workflow publishes reviewed prerelease versions and creates per-package
+[GitHub Releases](https://github.com/vooyajs/vooya/releases). See the
+[maintainer release guide](docs/maintainers/releases.md) for the complete gate
+and registry verification.
 
 ## Contributing
 

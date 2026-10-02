@@ -56,3 +56,31 @@ test("disposes a store that resolves after its owner is gone", async () => {
   await Promise.resolve();
   assert.equal(disposed, 1);
 });
+
+test("preserves a null snapshot before and after a Solid store action", async () => {
+  let value = null;
+  let listener;
+  let binding;
+  let disposeOwner;
+  createRoot((dispose) => {
+    disposeOwner = dispose;
+    binding = useVooyaStore(async () => ({
+      getSnapshot: () => value,
+      subscribe(next) { listener = next; return () => { listener = undefined; }; },
+      select(next) { value = next; listener?.(); },
+      dispose() {},
+    }), undefined);
+  });
+  try {
+    assert.equal(binding.state(), undefined);
+    await Promise.resolve();
+    assert.equal(binding.state(), null);
+    binding.store.select(7);
+    assert.equal(binding.state(), 7);
+    binding.store.select(null);
+    assert.equal(binding.state(), null);
+  } finally {
+    disposeOwner();
+  }
+  assert.equal(listener, undefined);
+});

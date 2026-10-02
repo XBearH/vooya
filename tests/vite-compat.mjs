@@ -61,6 +61,7 @@ let browser;
 let server;
 let productionServer;
 let output = "";
+const browserEvents = [];
 
 try {
   mkdirSync(packageDirectory, { recursive: true });
@@ -178,6 +179,7 @@ async function exerciseProductionBuild() {
 
   browser ??= await chromium.launch();
   const page = await browser.newPage();
+  observePage(page, "production");
   const browserErrors = [];
   page.on("console", (message) => {
     if (message.type() === "error") browserErrors.push(message.text());
@@ -209,6 +211,7 @@ async function exerciseDevelopmentServer() {
 
   browser ??= await chromium.launch();
   const page = await browser.newPage();
+  observePage(page, "development");
   const browserWarnings = [];
   page.on("console", (message) => {
     if (message.type() === "warning" && message.text().includes("externalized for browser compatibility")) {
@@ -291,7 +294,26 @@ function collectOutput(chunk) {
 }
 
 async function expectText(page, expected) {
-  await page.locator(target.selector ?? ".portable-counter").getByText(expected, { exact: true }).waitFor({ timeout: 30_000 });
+  try {
+    await page.locator(target.selector ?? ".portable-counter").getByText(expected, { exact: true }).waitFor({ timeout: 30_000 });
+  } catch (cause) {
+    const html = await page.locator("body").innerHTML().catch((error) => String(error));
+    throw new Error(`${target.label} did not render ${JSON.stringify(expected)} at ${page.url()}.\nServer exit: ${server?.exitCode}, signal: ${server?.signalCode}\nBrowser events:\n${browserEvents.join("\n")}\nPage body:\n${html}\nDev server output:\n${output}`, { cause });
+  }
+}
+
+function observePage(page, phase) {
+  const record = (message) => {
+    browserEvents.push(`${phase}: ${message}`);
+    if (browserEvents.length > 100) browserEvents.shift();
+  };
+  page.on("console", (message) => record(`console ${message.type()}: ${message.text()}`));
+  page.on("pageerror", (error) => record(`pageerror: ${error.stack ?? error.message}`));
+  page.on("requestfailed", (request) => record(`request failed: ${request.url()} ${request.failure()?.errorText}`));
+  page.on("response", (response) => {
+    if (response.status() >= 400) record(`HTTP ${response.status()}: ${response.url()}`);
+  });
+  page.on("websocket", (socket) => socket.on("framereceived", ({ payload }) => record(`websocket: ${String(payload).slice(0, 2000)}`)));
 }
 
 async function waitForServer(url) {

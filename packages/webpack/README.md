@@ -5,7 +5,8 @@ path in Vue 3 and React 19 applications. The current `.rs` authoring
 integration is Vite-only; this package does not claim `.rs` discovery yet. Source consumers still need Cargo, the
 `wasm32-unknown-unknown` target, and `wasm-bindgen-cli` `0.2.115`.
 
-Install every `@vooya/*` package at the same exact version.
+Install Vooya packages from the same `beta` channel and retain the lockfile;
+package versions are independent with exact internal dependencies.
 
 ```js
 import { vooyaWebpack } from "@vooya/webpack";

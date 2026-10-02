@@ -1,10 +1,12 @@
 // This package is intentionally bundler-neutral: adapters own virtual modules,
 // watching and presentation, while this module owns the Rust/WASM application build.
 import { execFileSync, spawnSync } from "node:child_process";
-import { cpSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { cpSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, relative, resolve } from "node:path";
 
+import { acquireBuildLock } from "./build-lock.js";
 import { CargoBuildError, VooyaUserError } from "./errors.js";
 import { resolveRustBuildOptions } from "./cargo-manifest.js";
 import type { RustBuildOptions, RustDependency } from "./cargo-manifest.js";
@@ -176,7 +178,9 @@ export function generateRustSourceRoot(
     }
     used.add(identifier);
     const visibility = publicSet.has(file) ? "pub " : "";
-    const attribute = conventional ? "#[allow(non_snake_case)]\n" : `#[path = ${JSON.stringify(relativePath)}]\n`;
+    const attribute = conventional && identifier === sourceName
+      ? "#[allow(non_snake_case)]\n"
+      : `#[path = ${JSON.stringify(relativePath)}]\n`;
     declarations.push(`${attribute}${visibility}mod ${identifier};`);
   }
   return `${declarations.join("\n")}\n`;
@@ -296,7 +300,18 @@ export function resolveRustDependencyRoots(
  * Build compiler results into a reusable WASM application artifact. `components`
  * are the parsed `.voo` compiler results; callers retain all bundler-specific IO.
  */
-export function buildApplication({
+export function buildApplication(options: BuildApplicationOptions): BuildApplicationResult {
+  if (!options.applicationRoot) throw new Error("Vooya build requires applicationRoot.");
+  const workspace = resolveVooyaWorkspace(options.applicationRoot, options.workspaceRoot);
+  const release = acquireBuildLock(workspace.root);
+  try {
+    return buildApplicationUnlocked(options);
+  } finally {
+    release();
+  }
+}
+
+function buildApplicationUnlocked({
   applicationRoot,
   components = [],
   rust = {},
@@ -311,7 +326,6 @@ export function buildApplication({
   spawn = spawnSync,
   exec = execFileSync,
 }: BuildApplicationOptions): BuildApplicationResult {
-  if (!applicationRoot) throw new Error("Vooya build requires applicationRoot.");
   const resolvedRust = resolveRustBuildOptions(applicationRoot, rust);
   rust = resolvedRust.rust;
   const workspace = resolveVooyaWorkspace(applicationRoot, workspaceRoot);
@@ -328,7 +342,7 @@ export function buildApplication({
   mkdirSync(sourceDir, { recursive: true });
   // This directory is generated state. Reconcile it on every build so removed
   // or renamed source files cannot remain as phantom Rust modules.
-  rmSync(rustSourceDir, { force: true, recursive: true });
+  removeDirectory(rustSourceDir);
   mkdirSync(rustSourceDir, { recursive: true });
   for (const [index, component] of components.entries()) {
     const sourcePath = resolve(sourceDir, `${index}-${component.name}.rs`);
@@ -423,8 +437,8 @@ export function buildApplication({
     workspacePath,
   );
 
-  rmSync(outputDir, { force: true, recursive: true });
-  mkdirSync(outputDir, { recursive: true });
+  const stagingOutputDir = createStagingDirectory(outputDir);
+  const stagingMetadata = `${workspace.metadata}.staging-${randomUUID()}`;
   try {
     exec(
       toolchain.wasmBindgen.path,
@@ -436,11 +450,12 @@ export function buildApplication({
         "--target",
         "web",
         "--out-dir",
-        outputDir,
+        stagingOutputDir,
       ],
       { cwd: applicationRoot, env: toolchain.environment, stdio: "inherit" },
     );
   } catch (cause) {
+    discardStaging(stagingOutputDir);
     const detail = cause instanceof Error ? cause.message : String(cause);
     throw new VooyaUserError(
       `wasm-bindgen failed using ${toolchain.wasmBindgen.path}: ${detail}`,
@@ -448,73 +463,89 @@ export function buildApplication({
     );
   }
 
-  const runtimeModule = resolve(outputDir, "vooya_app.js");
-  const wasm = resolve(outputDir, "vooya_app_bg.wasm");
-  const wasmBytes = new Uint8Array(readFileSync(wasm));
-  // Test doubles and legacy precompiled artifacts may not contain a full WASM
-  // binary. Treat those as schema-less artifacts; a real WASM binary is still
-  // parsed strictly and malformed schema sections fail the build.
-  const schema = isWasmBinary(wasmBytes)
-    ? readVooyaSchema(wasmBytes)
-    : { version: 1 as const, records: [] };
-  const schemaIndex = indexVooyaSchema(schema);
-  validateVooyaSchemaGroups(schemaIndex);
-  const abiVersions = components.map(
-    (component) => generatedAdapterDefinition(component).abiVersion,
-  );
-  writeWorkspaceMetadata(workspace, {
-    abiVersions,
-    toolchain: {
-      cargo: toolchain.cargo.version,
-      rustc: toolchain.rustc.version,
-      target: toolchain.target.triple,
-      wasmBindgen: toolchain.wasmBindgen.version,
-    },
-  });
-  const schemaContracts = buildRustComponentContracts(schemaIndex);
-  return {
-    workspaceRoot: workspace.root,
-    runtimeModule,
-    javascript: { path: runtimeModule, code: readFileSync(runtimeModule, "utf8") },
-    wasm: { path: wasm, bytes: wasmBytes },
-    schema,
-    css: components
-      .filter((component) => component.style)
-      .map((component) => ({
-        componentId: component.id ?? component.name,
-        code: compileVooStyle(component),
-      })),
-    declarations: components.length > 0
-      ? components.map((component) => ({
+  const stagedWasm = resolve(stagingOutputDir, "vooya_app_bg.wasm");
+  let wasmBytes: Uint8Array;
+  try {
+    wasmBytes = new Uint8Array(readFileSync(stagedWasm));
+    // Test doubles and legacy precompiled artifacts may not contain a full WASM
+    // binary. Treat those as schema-less artifacts; a real WASM binary is still
+    // parsed strictly and malformed schema sections fail the build.
+    const schema = isWasmBinary(wasmBytes)
+      ? readVooyaSchema(wasmBytes)
+      : { version: 1 as const, records: [] };
+    const schemaIndex = indexVooyaSchema(schema);
+    validateVooyaSchemaGroups(schemaIndex);
+    const abiVersions = components.map(
+      (component) => generatedAdapterDefinition(component).abiVersion,
+    );
+    const runtimeModule = resolve(outputDir, "vooya_app.js");
+    const wasm = resolve(outputDir, "vooya_app_bg.wasm");
+    const schemaContracts = buildRustComponentContracts(schemaIndex);
+    const result: BuildApplicationResult = {
+      workspaceRoot: workspace.root,
+      runtimeModule,
+      javascript: { path: runtimeModule, code: readFileSync(resolve(stagingOutputDir, "vooya_app.js"), "utf8") },
+      wasm: { path: wasm, bytes: wasmBytes },
+      schema,
+      css: components
+        .filter((component) => component.style)
+        .map((component) => ({
           componentId: component.id ?? component.name,
-          framework,
-          code: generateVooDeclaration(component, framework),
-        }))
-      : [
-        ...schemaContracts.map((contract) => ({
-          componentId: contract.component.id,
-          framework,
-          code: generateRustSchemaDeclaration({ contract, framework, types: schemaIndex.types }),
+          code: compileVooStyle(component),
         })),
-        ...schemaIndex.stores.map((store) => ({
-          componentId: store.id,
-          framework,
-          code: generateRustStoreDeclaration(store, framework, schemaIndex.types),
-        })),
+      declarations: components.length > 0
+        ? components.map((component) => ({
+            componentId: component.id ?? component.name,
+            framework,
+            code: generateVooDeclaration(component, framework),
+          }))
+        : [
+          ...schemaContracts.map((contract) => ({
+            componentId: contract.component.id,
+            framework,
+            code: generateRustSchemaDeclaration({ contract, framework, types: schemaIndex.types }),
+          })),
+          ...schemaIndex.stores.map((store) => ({
+            componentId: store.id,
+            framework,
+            code: generateRustStoreDeclaration(store, framework, schemaIndex.types),
+          })),
+        ],
+      watchedFiles: [
+        ...(resolvedRust.manifestPath ? [resolvedRust.manifestPath] : []),
+        resolve(runtimeCrateRoot, "src"),
+        resolve(applicationRoot, configuredSourceRoot),
+        ...resolveRustDependencyRoots(rust, applicationRoot),
       ],
-    watchedFiles: [
-      ...(resolvedRust.manifestPath ? [resolvedRust.manifestPath] : []),
-      resolve(runtimeCrateRoot, "src"),
-      resolve(applicationRoot, configuredSourceRoot),
-      ...resolveRustDependencyRoots(rust, applicationRoot),
-    ],
-    diagnostics,
-    metadata: {
-      buildMode,
+      diagnostics,
+      metadata: {
+        buildMode,
+        abiVersions,
+        wasmBindgenTarget: "web",
+      },
+    };
+    // Complete every fallible artifact read, CSS/declaration transform, and
+    // metadata write before replacing the last successful output.
+    cpSync(workspace.metadata, stagingMetadata);
+    writeWorkspaceMetadata({ ...workspace, metadata: stagingMetadata }, {
       abiVersions,
-      wasmBindgenTarget: "web",
-    },
-  };
+      toolchain: {
+        cargo: toolchain.cargo.version,
+        rustc: toolchain.rustc.version,
+        target: toolchain.target.triple,
+        wasmBindgen: toolchain.wasmBindgen.version,
+      },
+    });
+    commitStagedArtifacts([
+      { staging: stagingOutputDir, destination: outputDir },
+      { staging: stagingMetadata, destination: workspace.metadata },
+    ]);
+    return result;
+  } catch (cause) {
+    discardStaging(stagingOutputDir);
+    discardStaging(stagingMetadata);
+    throw cause;
+  }
 }
 
 // Builds the empty runtime artifact shipped by @vooya/core without depending on
@@ -817,4 +848,79 @@ function writeIfChanged(path: string, content: string): void {
     if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
   }
   writeFileSync(path, content);
+}
+
+function createStagingDirectory(outputDir: string): string {
+  const staging = `${outputDir}.staging-${randomUUID()}`;
+  removeDirectory(staging);
+  mkdirSync(staging, { recursive: true });
+  return staging;
+}
+
+/** Install output and metadata only after all transforms succeed. Keep every backup
+ * until the complete install succeeds so a failed second rename can roll back
+ * the first one as well. This covers build failures, not process/power loss. */
+function commitStagedArtifacts(entries: Array<{ staging: string; destination: string }>): void {
+  const pending = entries.map((entry) => ({
+    ...entry,
+    backup: `${entry.destination}.previous-${randomUUID()}`,
+    backedUp: false,
+    installed: false,
+  }));
+  try {
+    for (const entry of pending) {
+      if (statIfExists(entry.destination)) {
+        renameWithRetry(entry.destination, entry.backup);
+        entry.backedUp = true;
+      }
+      renameWithRetry(entry.staging, entry.destination);
+      entry.installed = true;
+    }
+  } catch (cause) {
+    const failures: unknown[] = [cause];
+    for (const entry of [...pending].reverse()) {
+      try {
+        if (entry.installed) removeDirectory(entry.destination);
+        if (entry.backedUp) renameWithRetry(entry.backup, entry.destination);
+      } catch (rollbackCause) {
+        failures.push(new Error(`Could not restore ${entry.destination}; recovery backup: ${entry.backup}`, { cause: rollbackCause }));
+      }
+    }
+    if (failures.length > 1) throw new AggregateError(failures, "Vooya artifact install failed and rollback was incomplete; preserved backups require recovery.");
+    throw cause;
+  }
+  // Cleanup must not turn a successfully committed build into a reported
+  // failure after the old output has been removed. Leave busy backups to clean.
+  for (const entry of pending) if (entry.backedUp) discardStaging(entry.backup);
+}
+
+function discardStaging(path: string): void {
+  try { removeDirectory(path); } catch (cause) {
+    process.emitWarning(`Vooya could not remove temporary build output ${path}: ${String(cause)}`);
+  }
+}
+
+function statIfExists(path: string): boolean {
+  try { statSync(path); return true; } catch (cause) {
+    if ((cause as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw cause;
+  }
+}
+
+function renameWithRetry(from: string, to: string): void {
+  let lastCause: unknown;
+  for (const delay of [0, 25, 50, 100, 200]) {
+    if (delay) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, delay);
+    try { renameSync(from, to); return; } catch (cause) {
+      lastCause = cause;
+      if (!["ENOTEMPTY", "EBUSY", "EPERM", "EACCES"].includes((cause as NodeJS.ErrnoException).code ?? "")) throw cause;
+    }
+  }
+  throw lastCause;
+}
+
+function removeDirectory(path: string): void {
+  try { rmSync(path, { force: true, recursive: true, maxRetries: 4, retryDelay: 50 }); } catch (cause) {
+    if ((cause as NodeJS.ErrnoException).code !== "ENOENT") throw cause;
+  }
 }

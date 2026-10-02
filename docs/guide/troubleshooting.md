@@ -8,7 +8,7 @@ npm exec -- vooya doctor
 
 ## Rust or WASM target errors
 
-Install the target and the exact CLI version used by the current alpha:
+Install the target and the exact CLI version used by the current beta:
 
 ```sh
 rustup target add wasm32-unknown-unknown
@@ -74,6 +74,19 @@ Keep the dev server running, fix the reported Rust source line, and save again.
 The Vite, Rspack, and Webpack paths are designed to recover after a failed
 compilation. A successful Rust rebuild currently causes a full page reload, so
 component state is not preserved.
+
+Builds using the same `.vooya` workspace are serialized. Vooya prepares WASM,
+JavaScript, schema, CSS, declarations, and metadata before replacing the previous
+output. If preparation or installation fails, the last successful artifact and
+metadata are retained or restored. This recovery covers reported build failures;
+it is not a transaction across a process crash or power loss.
+
+The workspace lock is published with its owner already recorded. Recovery of a
+dead process only removes that owner's entry, so it cannot delete another
+process's replacement lock. An owner whose process still exists is never evicted
+on age alone. Builds still use the synchronous API: a contending call waits for
+up to 30 seconds and then reports a busy workspace. Retry after the other build
+finishes. Independent workspaces do not share this lock.
 
 ## Still blocked
 
