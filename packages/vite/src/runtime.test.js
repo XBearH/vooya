@@ -116,3 +116,47 @@ test("a failed initializer does not evict another initializer's cached success",
   assert.equal(callsA, 1);
   assert.equal(callsB, 1);
 });
+
+test("does not evict another initializer while it is still pending", async () => {
+  let failedCalls = 0;
+  let rejectFailed;
+  const failedInitializer = () => {
+    failedCalls += 1;
+    return new Promise((_, reject) => {
+      rejectFailed = reject;
+    });
+  };
+
+  let successfulCalls = 0;
+  let resolveSuccessful;
+  const successfulInitializer = () => {
+    successfulCalls += 1;
+    return new Promise((resolve) => {
+      resolveSuccessful = resolve;
+    });
+  };
+
+  const successful = initializeWasm(successfulInitializer);
+  const successfulPair = initializeWasm(successfulInitializer);
+  assert.equal(successful, successfulPair);
+  assert.equal(successfulCalls, 1);
+
+  const failed = initializeWasm(failedInitializer);
+  const failure = new Error("one initializer failed");
+  rejectFailed(failure);
+  await assert.rejects(failed, (cause) => cause === failure);
+  assert.equal(failedCalls, 1);
+
+  const afterFailure = initializeWasm(successfulInitializer);
+  assert.equal(afterFailure, successful);
+  assert.equal(successfulCalls, 1);
+
+  resolveSuccessful("cached WASM exports");
+  assert.deepEqual(await Promise.all([successful, successfulPair, afterFailure]), [
+    "cached WASM exports",
+    "cached WASM exports",
+    "cached WASM exports",
+  ]);
+  assert.equal(initializeWasm(successfulInitializer), successful);
+  assert.equal(successfulCalls, 1);
+});
