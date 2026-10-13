@@ -151,6 +151,10 @@ See [the release guide](../maintainers/releases.md).
 - Turbopack has no compatibility claim. Its loader API evidence and unverified integration requirements are
   recorded in [Turbopack research](turbopack-research.md); Webpack and Rspack
   evidence must not be generalized to Turbopack.
+- No browser IDE, in-browser Rust compilation, remote compilation service, or
+  offline language environment is currently supported. `@vooya/preset` prepares
+  native host tools and does not run those tools in a browser; see
+  [Issue #181](https://github.com/vooyajs/vooya/issues/181).
 - No precompiled component product is currently published; the retained Vue
   fixture is build-contract evidence, not a user-facing package.
 - A non-trivial component still uses some direct `web_sys` APIs.

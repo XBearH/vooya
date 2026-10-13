@@ -82,6 +82,10 @@ AssemblyScript、Emscripten、Go 等 canary 仍是后续研究；边界见
 [语言 provider 研究（英文原文）](../../project/language-provider-research.md)和
 [Issue #94](https://github.com/vooyajs/vooya/issues/94)。
 
+当前没有支持的 browser IDE、浏览器内 Rust 编译、remote compilation service 或离线
+language environment。`@vooya/preset` 准备的是本机 host tool，不能在浏览器中运行；见
+[Issue #181](https://github.com/vooyajs/vooya/issues/181)。
+
 Octane 保留为私有 workspace 实验，延期且不纳入本批公共发布门禁。
 
 0.1 只维护已发布行为，0.2 按功能批次审查和冻结。Go/TinyGo、多语言协议、Rust
