@@ -58,21 +58,23 @@ test("shares a failed initialization rejection and allows a fresh attempt", asyn
   assert.equal(calls, 1);
 
   rejectFirst(failure);
-  const results = await Promise.allSettled([first, second]);
-  assert.deepEqual(results, [
-    { status: "rejected", reason: failure },
-    { status: "rejected", reason: failure },
+  await Promise.all([
+    assert.rejects(first, (cause) => cause === failure),
+    assert.rejects(second, (cause) => cause === failure),
   ]);
 
   const retry = initializeWasm(initializer);
   const retryCaller = initializeWasm(initializer);
   assert.equal(retry, retryCaller);
+  assert.notEqual(retry, first);
   assert.equal(calls, 2);
 
   resolveSecond("recovered exports");
   assert.equal(await retry, "recovered exports");
   assert.equal(await retryCaller, "recovered exports");
-  assert.equal(await initializeWasm(initializer), "recovered exports");
+  const laterCaller = initializeWasm(initializer);
+  assert.equal(laterCaller, retry);
+  assert.equal(await laterCaller, "recovered exports");
   assert.equal(calls, 2);
 });
 
