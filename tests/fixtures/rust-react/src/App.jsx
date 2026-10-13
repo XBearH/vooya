@@ -6,6 +6,20 @@ export function App() {
   const { state, add } = useCart();
   const [selected, setSelected] = useState(null);
   const [actionResult, setActionResult] = useState(null);
+  async function checkDisposalFromListener() {
+    const first = await createCartStore();
+    const sibling = await createCartStore();
+    const unsubscribe = first.subscribe(() => first.dispose());
+    try {
+      first.add(1);
+      sibling.add(2);
+      setActionResult(JSON.stringify({ firstDisposed: true, siblingCount: sibling.getSnapshot().count }));
+    } finally {
+      unsubscribe();
+      first.dispose();
+      sibling.dispose();
+    }
+  }
   async function checkActionErrors() {
     const store = await createCartStore();
     let notifications = 0;
@@ -32,6 +46,7 @@ export function App() {
       <span className="selected">Selected {selected?.id} {selected?.tags.join(",")}</span>
       <button className="store-add" onClick={() => add(1)}>Store {count} / {itemCount}</button>
       <button onClick={checkActionErrors}>Check action errors</button>
+      <button onClick={checkDisposalFromListener}>Check listener disposal</button>
       <output data-testid="action-result">{actionResult}</output>
     </main>
   );

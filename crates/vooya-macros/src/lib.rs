@@ -333,22 +333,23 @@ pub fn store(attribute: TokenStream, input: TokenStream) -> TokenStream {
             quote! { let _ = state.#method_name(#(#call_parameters),*); }
         };
         let dispatch = if returns_result {
-            quote! { existing.store.dispatch(|state| { #invoke })?; }
+            quote! { __voo_store.dispatch(|state| { #invoke })?; }
         } else {
-            quote! { existing.store.dispatch(|state| { #invoke }); }
+            quote! { __voo_store.dispatch(|state| { #invoke }); }
         };
         quote! {
             #[::vooya::__private::wasm_bindgen::prelude::wasm_bindgen]
             pub fn #export_name(handle: u32, #(#js_parameters),*) -> ::core::result::Result<(), ::vooya::__private::wasm_bindgen::JsValue> {
                 #(#decoded_parameters)*
-                #handles_name.with(|handles| {
+                let __voo_store = #handles_name.with(|handles| {
                     let handles = handles.borrow();
                     let Some(Some(existing)) = handles.get(handle as usize) else {
                         return ::core::result::Result::Err(::vooya::abi_error("invalid store handle"));
                     };
-                    #dispatch
-                    ::core::result::Result::Ok(())
-                })
+                    ::core::result::Result::Ok(existing.store.clone())
+                })?;
+                #dispatch
+                ::core::result::Result::Ok(())
             }
         }
     });
@@ -898,7 +899,14 @@ fn derive_abi(input: DeriveInput, direction: AbiDirection) -> TokenStream {
         )),
     };
     match generated {
-        Ok(generated) => emit_schema(generated, schema, match direction { AbiDirection::From => "type_from", AbiDirection::To => "type_to" }),
+        Ok(generated) => emit_schema(
+            generated,
+            schema,
+            match direction {
+                AbiDirection::From => "type_from",
+                AbiDirection::To => "type_to",
+            },
+        ),
         Err(error) => error.into_compile_error().into(),
     }
 }
@@ -915,7 +923,10 @@ fn schema_source(span: proc_macro2::Span) -> Value {
 }
 
 fn abi_type_schema(input: &DeriveInput, direction: &AbiDirection, group: String) -> Value {
-    let direction = match direction { AbiDirection::From => "from", AbiDirection::To => "to" };
+    let direction = match direction {
+        AbiDirection::From => "from",
+        AbiDirection::To => "to",
+    };
     let name = input.ident.to_string();
     let shape = match &input.data {
         Data::Struct(data) => json!({
@@ -1334,7 +1345,9 @@ mod tests {
         }
         // This domain value has no Try implementation; the action must keep
         // discarding it rather than generating a question-mark operator.
-        assert!(!action_returns_result(&parse_quote!(-> domain::Result<u32>)));
+        assert!(!action_returns_result(
+            &parse_quote!(-> domain::Result<u32>)
+        ));
         assert!(!action_returns_result(&syn::ReturnType::Default));
     }
 }
