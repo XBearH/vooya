@@ -119,6 +119,37 @@ test("rejects unsafe or non-file artifact manifest assets", () => {
   }
 });
 
+test("validates artifact manifest compatibility and binding metadata without Rust tools", () => {
+  const fixture = createArtifactFixture();
+  const output = resolve(fixture.root, "dist");
+  try {
+    writeArtifactOutput(fixture.root);
+    assert.doesNotThrow(() => validatePrecompiledVueArtifactOutput(output));
+    const cases = [
+      [{ formatVersion: 2 }, /formatVersion must be 1/],
+      [{ framework: "react" }, /framework must be vue/],
+      [{ artifactVersion: "latest" }, /artifactVersion must be a valid package version/],
+      [{ component: " " }, /component must be a nonempty name/],
+      [{ abiVersion: 2 }, /ABI mismatch: expected 1, received 2/],
+      [{ abiVersion: "1" }, /ABI mismatch/],
+      [{ bindings: null }, /bindings must declare/],
+      [{ bindings: { mount: "mount", dispose: "dispose", updates: [] } }, /bindings must declare/],
+      [{ bindings: { mount: "", dispose: "dispose", updates: {} } }, /bindings must declare/],
+      [{ bindings: { mount: "mount", dispose: "dispose", updates: { initial: 1 } } }, /bindings must declare/],
+    ];
+    for (const [override, message] of cases) {
+      writeArtifactOutput(fixture.root, override);
+      assert.throws(() => validatePrecompiledVueArtifactOutput(output), message);
+    }
+    for (const invalid of [null, [], {}, { formatVersion: 1 }]) {
+      writeFileSync(resolve(output, "manifest.json"), JSON.stringify(invalid));
+      assert.throws(() => validatePrecompiledVueArtifactOutput(output), /manifest/);
+    }
+  } finally {
+    fixture.cleanup();
+  }
+});
+
 test("rejects build input and absolute output paths in artifact files", () => {
   const fixture = createArtifactFixture();
   try {
@@ -147,7 +178,18 @@ function createArtifactFixture({ vueDependency = vueVersion } = {}) {
   return { root, source, cleanup: () => rmSync(root, { recursive: true, force: true }) };
 }
 
-function writeArtifactOutput(root, manifest = { wasm: "./wasm/vooya_app_bg.wasm", types: "./index.d.ts" }) {
+function writeArtifactOutput(root, overrides = {}) {
+  const manifest = {
+    formatVersion: 1,
+    artifactVersion: vueVersion,
+    framework: "vue",
+    component: "PortableCounter",
+    abiVersion: 1,
+    bindings: { mount: "voo_portable_counter_mount", dispose: "voo_portable_counter_dispose", updates: {} },
+    wasm: "./wasm/vooya_app_bg.wasm",
+    types: "./index.d.ts",
+    ...overrides,
+  };
   const dist = resolve(root, "dist");
   mkdirSync(resolve(dist, "wasm"), { recursive: true });
   writeFileSync(resolve(dist, "manifest.json"), `${JSON.stringify(manifest)}\n`);

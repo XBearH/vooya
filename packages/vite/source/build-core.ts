@@ -8,6 +8,7 @@ import {
   generatedAdapterDefinition,
   generatedComponentBinding,
   parseVooComponent,
+  VOO_ABI_VERSION,
 } from "@vooya/compiler";
 import { buildApplication as buildSharedApplication } from "@vooya/build-core";
 
@@ -149,7 +150,30 @@ export function validatePrecompiledVueArtifactOutput(outputDir: string) {
     }
   }
   const manifest: unknown = JSON.parse(readFileSync(resolve(outputDir, "manifest.json"), "utf8"));
-  if (!manifest || typeof manifest !== "object") throw new Error("Vooya precompiled Vue artifact manifest must be an object.");
+  if (!manifest || typeof manifest !== "object" || Array.isArray(manifest)) throw new Error("Vooya precompiled Vue artifact manifest must be an object.");
+  if (!("formatVersion" in manifest) || manifest.formatVersion !== 1) {
+    throw new Error("Vooya precompiled Vue artifact manifest formatVersion must be 1.");
+  }
+  if (!("framework" in manifest) || manifest.framework !== "vue") {
+    throw new Error("Vooya precompiled Vue artifact manifest framework must be vue.");
+  }
+  if (!("artifactVersion" in manifest) || typeof manifest.artifactVersion !== "string" || !isSemverVersion(manifest.artifactVersion)) {
+    throw new Error("Vooya precompiled Vue artifact manifest artifactVersion must be a valid package version.");
+  }
+  if (!("component" in manifest) || typeof manifest.component !== "string" || !manifest.component.trim()) {
+    throw new Error("Vooya precompiled Vue artifact manifest component must be a nonempty name.");
+  }
+  if (!("abiVersion" in manifest) || manifest.abiVersion !== VOO_ABI_VERSION) {
+    throw new Error(`Vooya artifact ABI mismatch: expected ${VOO_ABI_VERSION}, received ${"abiVersion" in manifest ? String(manifest.abiVersion) : "undefined"}.`);
+  }
+  const bindings = "bindings" in manifest ? manifest.bindings : undefined;
+  if (!bindings || typeof bindings !== "object" || Array.isArray(bindings)
+    || !("mount" in bindings) || typeof bindings.mount !== "string" || !/^[A-Za-z_$][\w$]*$/.test(bindings.mount)
+    || !("dispose" in bindings) || typeof bindings.dispose !== "string" || !/^[A-Za-z_$][\w$]*$/.test(bindings.dispose)
+    || !("updates" in bindings) || !bindings.updates || typeof bindings.updates !== "object" || Array.isArray(bindings.updates)
+    || Object.entries(bindings.updates).some(([prop, name]) => !prop.trim() || typeof name !== "string" || !/^[A-Za-z_$][\w$]*$/.test(name))) {
+    throw new Error("Vooya precompiled Vue artifact manifest bindings must declare mount, dispose and an updates map of export names.");
+  }
   for (const [name, path] of Object.entries({ wasm: "wasm" in manifest ? manifest.wasm : undefined, types: "types" in manifest ? manifest.types : undefined })) {
     if (typeof path !== "string" || !path.startsWith("./") || !isArtifactRelativePath(path)) {
       throw new Error(`Vooya precompiled Vue artifact manifest ${name} must be a package-relative path.`);
