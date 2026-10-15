@@ -24,6 +24,9 @@ try {
     manifest.dependencies[`@vooya/${name}`] = `file:${resolve(packs, JSON.parse(output)[0].filename)}`;
   }
   writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  // The fixture pins @vitejs/devtools to the range shared by Nuxt (*) and
+  // Vite (^0.7.1). Selecting 0.8 first makes npm 10 crash while replacing it
+  // during optional peer resolution, even with Nuxt devtools disabled.
   run("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund"], temporary);
   run("npm", ["run", "build"], temporary);
 
