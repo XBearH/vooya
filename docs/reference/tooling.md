@@ -209,7 +209,7 @@ npm run test:rust-hmr
 ## Rspack and Rsbuild
 
 ::: warning Rust-file support requires 0.2 alpha
-The npm 0.1 beta adapter covers transitional `.voo` regression fixtures.
+The npm 0.1 beta adapter does not implement ordinary Rust-file integration; use the documented opt-in 0.2 alpha package graph.
 Use the matching alpha.0 bundler and Vue/React adapter packages for the `.rs`
 configuration below. The [alpha installation guide](../project/next-release.md)
 records exact versions; SSR and unlisted framework combinations remain unverified.
@@ -240,7 +240,7 @@ server.
 ## Webpack 5
 
 ::: warning Rust-file support requires 0.2 alpha
-The npm 0.1 beta adapter covers transitional `.voo` regression fixtures.
+The npm 0.1 beta adapter does not implement ordinary Rust-file integration; use the documented opt-in 0.2 alpha package graph.
 Use the matching alpha.0 bundler and Vue/React adapter packages for the `.rs`
 configuration below. The [alpha installation guide](../project/next-release.md)
 records exact versions; SSR and unlisted framework combinations remain unverified.

@@ -1,7 +1,7 @@
 {
   "name": "@vooya/compiler",
   "version": "0.1.0-beta.0",
-  "description": "Pure .voo compiler pipeline for Vooya component islands.",
+  "description": "ABI and scoped-style helpers for Vooya Rust components.",
   "type": "module",
   "license": "MIT OR Apache-2.0",
   "repository": {
@@ -29,7 +29,7 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "npm run build && node --test test/*.test.js"
   },

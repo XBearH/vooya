@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { compileVooStyle } from "../dist/index.js";
+import { compileComponentStyle } from "../dist/index.js";
 
 const component = {
-  id: "/app/Counter.voo",
+  id: "/app/Counter.rs",
   name: "Counter",
   style: {
     content: `.counter, button { display: flex; }
@@ -16,7 +16,7 @@ const component = {
 };
 
 test("prefixes component selectors with a stable host scope", () => {
-  const css = compileVooStyle(component);
+  const css = compileComponentStyle(component);
   assert.match(css, /\[data-voo-scope="voo-[a-f0-9]+"\] \.counter/);
   assert.match(css, /\[data-voo-scope="voo-[a-f0-9]+"\] button/);
   assert.match(css, /\[data-voo-scope="voo-[a-f0-9]+"\] \{ color: red; \}/);
@@ -27,7 +27,7 @@ test("prefixes component selectors with a stable host scope", () => {
 
 test("leaves unscoped styles unchanged", () => {
   assert.equal(
-    compileVooStyle({
+    compileComponentStyle({
       ...component,
       style: { content: ".counter { display: flex; }", scoped: false },
     }),
@@ -36,7 +36,7 @@ test("leaves unscoped styles unchanged", () => {
 });
 
 test("compiles functional :host selectors into valid scoped selectors", () => {
-  const css = compileVooStyle({
+  const css = compileComponentStyle({
     ...component,
     style: {
       content: `:host(.active) > button,
@@ -59,14 +59,14 @@ test("rejects unsupported :host forms with a source-oriented error", () => {
   ]) {
     assert.throws(
       () =>
-        compileVooStyle({
+        compileComponentStyle({
           ...component,
           style: { content: source, scoped: true },
         }),
       (error) =>
         error instanceof Error &&
         /Unsupported :host selector/.test(error.message) &&
-        /Counter\.voo/.test(error.message),
+        /Counter\.rs/.test(error.message),
     );
   }
 });

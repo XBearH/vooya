@@ -1,0 +1,325 @@
+// The component contract and implementation are ordinary Rust.
+#[vooya::props]
+#[derive(vooya::FromJs)]
+pub struct TaskListProps {}
+
+use std::collections::HashSet;
+
+use wasm_bindgen::{closure::Closure, JsCast, JsValue};
+use web_sys::{Element, Event, HtmlElement, HtmlInputElement};
+
+use crate::{effect, signal, Effect, SignalSubscription};
+
+#[derive(Clone)]
+struct Task {
+    id: u32,
+    label: String,
+    done: bool,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum Filter {
+    All,
+    Active,
+    Done,
+}
+
+impl Filter {
+    fn matches(self, task: &Task) -> bool {
+        match self {
+            Self::All => true,
+            Self::Active => !task.done,
+            Self::Done => task.done,
+        }
+    }
+}
+
+pub struct Component {
+    root: Element,
+    _handlers: Vec<Closure<dyn FnMut(Event)>>,
+    _render: Effect,
+    _task_subscription: SignalSubscription<Vec<Task>>,
+    _filter_subscription: SignalSubscription<Filter>,
+    _error_subscription: SignalSubscription<Option<String>>,
+}
+
+impl Component {
+    pub fn dispose(&mut self) {
+        self.root.remove();
+    }
+}
+
+fn mount(context: MountContext) -> Result<Component, JsValue> {
+    let host = context.host;
+    let document = host
+        .owner_document()
+        .ok_or_else(|| JsValue::from_str("Vooya mount host has no document"))?;
+    let root = document.create_element("section")?;
+    root.set_class_name("vooya-task-list");
+    root.set_attribute("data-vooya-island", "task-list")?;
+    root.set_inner_html(
+        r#"
+        <div class="vooya-task-compose">
+          <input data-vooya-task-input aria-label="New task" placeholder="Add a task">
+          <button data-vooya-add>Add task</button>
+        </div>
+        <p data-vooya-error role="alert"></p>
+        <div class="vooya-task-filters">
+          <button data-vooya-filter="all">All</button>
+          <button data-vooya-filter="active">Active</button>
+          <button data-vooya-filter="done">Done</button>
+        </div>
+        <p data-vooya-summary></p>
+        <p data-vooya-empty hidden>No tasks in this view.</p>
+        <div data-vooya-task-rows></div>
+        "#,
+    );
+    host.append_child(&root)?;
+
+    let tasks = signal(vec![
+        Task {
+            id: 1,
+            label: "Design the island boundary".into(),
+            done: true,
+        },
+        Task {
+            id: 2,
+            label: "Measure a real workload".into(),
+            done: true,
+        },
+        Task {
+            id: 3,
+            label: "Build a reusable component model".into(),
+            done: false,
+        },
+    ]);
+    let filter = signal(Filter::All);
+    let error = signal(None::<String>);
+    let next_id = signal(4_u32);
+
+    let render_root = root.clone();
+    let render_tasks = tasks.clone();
+    let render_filter = filter.clone();
+    let render_error = error.clone();
+    let render = effect(move || {
+        render_task_list(
+            &render_root,
+            &render_tasks.get(),
+            render_filter.get(),
+            render_error.get().as_deref(),
+        )
+    });
+    render();
+
+    let input: HtmlInputElement = root
+        .query_selector("[data-vooya-task-input]")?
+        .ok_or_else(|| JsValue::from_str("Vooya task input is missing"))?
+        .dyn_into()?;
+    let add: HtmlElement = root
+        .query_selector("[data-vooya-add]")?
+        .ok_or_else(|| JsValue::from_str("Vooya add task button is missing"))?
+        .dyn_into()?;
+    let add_input = input.clone();
+    let add_tasks = tasks.clone();
+    let add_error = error.clone();
+    let add_next_id = next_id.clone();
+    let add_handler = Closure::new(move |_event: Event| {
+        let label = add_input.value().trim().to_owned();
+        if label.is_empty() {
+            add_error.set(Some("A task needs a label.".into()));
+            return;
+        }
+        let id = add_next_id.get();
+        add_next_id.set(id + 1);
+        add_tasks.update(|tasks| {
+            tasks.push(Task {
+                id,
+                label,
+                done: false,
+            })
+        });
+        add_error.set(None);
+        add_input.set_value("");
+    });
+    add.add_event_listener_with_callback("click", add_handler.as_ref().unchecked_ref())?;
+
+    let click_tasks = tasks.clone();
+    let click_filter = filter.clone();
+    let click_handler = Closure::new(move |event: Event| {
+        let Some(target) = event
+            .target()
+            .and_then(|target| target.dyn_into::<Element>().ok())
+        else {
+            return;
+        };
+        if let Some(value) = target.get_attribute("data-vooya-filter") {
+            let next = match value.as_str() {
+                "active" => Filter::Active,
+                "done" => Filter::Done,
+                _ => Filter::All,
+            };
+            click_filter.set(next);
+            return;
+        }
+        let Some(action) = target.get_attribute("data-vooya-task-action") else {
+            return;
+        };
+        let Some(id) = target
+            .get_attribute("data-vooya-task-id")
+            .and_then(|value| value.parse::<u32>().ok())
+        else {
+            return;
+        };
+        click_tasks.update(|tasks| match action.as_str() {
+            "toggle" => {
+                if let Some(task) = tasks.iter_mut().find(|task| task.id == id) {
+                    task.done = !task.done;
+                }
+            }
+            "remove" => tasks.retain(|task| task.id != id),
+            _ => {}
+        });
+    });
+    root.add_event_listener_with_callback("click", click_handler.as_ref().unchecked_ref())?;
+
+    let task_subscription = tasks.subscribe(render.clone());
+    let filter_subscription = filter.subscribe(render.clone());
+    let error_subscription = error.subscribe(render.clone());
+
+    Ok(Component {
+        root,
+        _handlers: vec![add_handler, click_handler],
+        _render: render,
+        _task_subscription: task_subscription,
+        _filter_subscription: filter_subscription,
+        _error_subscription: error_subscription,
+    })
+}
+
+fn render_task_list(root: &Element, tasks: &[Task], filter: Filter, error: Option<&str>) {
+    let visible = tasks
+        .iter()
+        .filter(|task| filter.matches(task))
+        .cloned()
+        .collect::<Vec<_>>();
+    if let Ok(Some(summary)) = root.query_selector("[data-vooya-summary]") {
+        summary.set_text_content(Some(&format!(
+            "{} of {} tasks shown",
+            visible.len(),
+            tasks.len()
+        )));
+    }
+    if let Ok(Some(error_node)) = root.query_selector("[data-vooya-error]") {
+        error_node.set_text_content(error);
+    }
+    if let Ok(Some(empty)) = root.query_selector("[data-vooya-empty]") {
+        if visible.is_empty() {
+            let _ = empty.remove_attribute("hidden");
+        } else {
+            let _ = empty.set_attribute("hidden", "");
+        }
+    }
+    let Ok(Some(rows)) = root.query_selector("[data-vooya-task-rows]") else {
+        return;
+    };
+    let Some(document) = root.owner_document() else {
+        return;
+    };
+    let visible_ids = visible.iter().map(|task| task.id).collect::<HashSet<_>>();
+    for task in &visible {
+        let selector = format!("[data-vooya-key=\"{}\"]", task.id);
+        let row = rows
+            .query_selector(&selector)
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| {
+                let row = document.create_element("div").unwrap();
+                row.set_class_name("vooya-task-row");
+                let _ = row.set_attribute("data-vooya-key", &task.id.to_string());
+                row
+            });
+        row.set_class_name(if task.done {
+            "vooya-task-row is-done"
+        } else {
+            "vooya-task-row"
+        });
+        row.set_text_content(None);
+        let label = document.create_element("span").unwrap();
+        label.set_text_content(Some(&task.label));
+        let toggle = document.create_element("button").unwrap();
+        let _ = toggle.set_attribute("data-vooya-task-action", "toggle");
+        let _ = toggle.set_attribute("data-vooya-task-id", &task.id.to_string());
+        toggle.set_text_content(Some(if task.done { "Undo" } else { "Done" }));
+        let remove = document.create_element("button").unwrap();
+        let _ = remove.set_attribute("data-vooya-task-action", "remove");
+        let _ = remove.set_attribute("data-vooya-task-id", &task.id.to_string());
+        remove.set_text_content(Some("Remove"));
+        let _ = row.append_child(&label);
+        let _ = row.append_child(&toggle);
+        let _ = row.append_child(&remove);
+        let _ = rows.append_child(&row);
+    }
+    let existing = rows.children();
+    for index in (0..existing.length()).rev() {
+        if let Some(row) = existing.item(index) {
+            let keep = row
+                .get_attribute("data-vooya-key")
+                .and_then(|id| id.parse::<u32>().ok())
+                .is_some_and(|id| visible_ids.contains(&id));
+            if !keep {
+                row.remove();
+            }
+        }
+    }
+}
+
+struct MountContext {
+    host: web_sys::Element,
+}
+
+thread_local! {
+    static MOUNTED: std::cell::RefCell<Vec<Option<Component>>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+#[vooya::component]
+pub fn TaskList(
+    view: &vooya::View,
+    _props: TaskListProps,
+) -> Result<vooya::ViewElement, wasm_bindgen::JsValue> {
+    let root = view
+        .element("div")?
+        .attribute("style", "display: contents")?;
+    let cleanup = vooya::MountCleanup::default();
+    let context = MountContext {
+        host: root.as_element().clone(),
+    };
+    let component = match mount(context) {
+        Ok(component) => component,
+        Err(cause) => {
+            cleanup.run();
+            root.remove();
+            return Err(cause);
+        }
+    };
+    cleanup.disarm();
+    let handle = MOUNTED.with(|mounted| {
+        let mut mounted = mounted.borrow_mut();
+        if let Some(handle) = mounted.iter().position(Option::is_none) {
+            mounted[handle] = Some(component);
+            handle
+        } else {
+            mounted.push(Some(component));
+            mounted.len() - 1
+        }
+    });
+    root.as_element()
+        .set_attribute("data-example-handle", &handle.to_string())?;
+    root.defer_cleanup(move || {
+        let component =
+            MOUNTED.with(|mounted| mounted.borrow_mut().get_mut(handle).and_then(Option::take));
+        if let Some(mut component) = component {
+            component.dispose();
+        }
+    });
+    Ok(root)
+}

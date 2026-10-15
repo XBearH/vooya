@@ -1,8 +1,8 @@
 import { useState } from "react";
-import Counter from "./Counter.voo";
-import FailMount from "./FailMount.voo";
-import LoopEvents from "./LoopEvents.voo";
-import ProtocolEvents from "./ProtocolEvents.voo";
+import Counter from "./Counter.rs";
+import FailMount from "./FailMount.rs";
+import LoopEvents from "./LoopEvents.rs";
+import ProtocolEvents from "./ProtocolEvents.rs";
 
 export function App() {
   const [initial, setInitial] = useState(1);

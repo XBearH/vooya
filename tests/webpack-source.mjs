@@ -68,11 +68,11 @@ function buildAndInspect(project, name) {
     throw new Error(`${name} did not emit a WASM asset.`);
   }
   const typesRoot = resolve(project, ".vooya/types");
-  if (!existsSync(typesRoot) || !walk(typesRoot).some((path) => path.endsWith(".d.voo.ts"))) {
+  if (!existsSync(typesRoot) || !walk(typesRoot).some((path) => path.endsWith(".d.rs.ts"))) {
     throw new Error(`${name} did not generate declarations under .vooya/types.`);
   }
-  if (walk(resolve(project, "src")).some((path) => path.endsWith(".d.voo.ts"))) {
-    throw new Error(`${name} wrote generated declarations beside a source .voo file.`);
+  if (walk(resolve(project, "src")).some((path) => path.endsWith(".d.rs.ts"))) {
+    throw new Error(`${name} wrote generated declarations beside a source .rs file.`);
   }
   if (!existsSync(resolve(project, ".vooya/metadata.json"))) {
     throw new Error(`${name} did not write Vooya workspace metadata.`);
@@ -133,7 +133,7 @@ async function verifyDevRecovery(project) {
     await page.goto(`http://127.0.0.1:${port}`);
     await page.getByRole("button", { name: "Increment" }).waitFor();
 
-    const componentPath = resolve(project, "src/Counter.voo");
+    const componentPath = resolve(project, "src/Counter.rs");
     const source = readFileSync(componentPath, "utf8");
     const successesBeforeFailure = successfulBuildCount(output);
     writeFileSync(
@@ -148,8 +148,8 @@ async function verifyDevRecovery(project) {
       60_000,
       () => output,
     );
-    if (!/Counter\.voo:\d+/.test(plainOutput(output))) {
-      throw new Error(`Webpack did not retain the mapped .voo Rust diagnostic.\n${output}`);
+    if (!/Counter\.rs:\d+/.test(plainOutput(output))) {
+      throw new Error(`Webpack did not retain the mapped .rs Rust diagnostic.\n${output}`);
     }
     if (server.exitCode !== null) throw new Error("Webpack Dev Server exited after a Rust failure.");
 

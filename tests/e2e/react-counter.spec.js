@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("runs the Rust .voo component through the React lifecycle", async ({ page }) => {
+test("runs the Rust .rs component through the React lifecycle", async ({ page }) => {
   const browserErrors = [];
   page.on("console", (message) => {
     if (message.type() === "error") browserErrors.push(message.text());

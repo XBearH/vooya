@@ -1,0 +1,7 @@
+.rust-scatter { background: #fff; border: 1px solid #d9e1e4; box-shadow: 0 12px 28px rgba(24, 47, 57, 0.08); }
+.scatter-toolbar { align-items: center; display: flex; gap: 12px; min-height: 48px; padding: 0 14px; }
+.scatter-toolbar > span:not(.scatter-actions) { color: #60717d; font-size: 14px; font-variant-numeric: tabular-nums; }
+.scatter-actions { display: flex; gap: 6px; margin-left: auto; }
+.scatter-actions button { background: #f7fbfb; border: 1px solid #b9cdcf; color: #123f40; cursor: pointer; min-height: 30px; padding: 0 10px; }
+.scatter-actions button:hover { background: #dcefee; }
+[data-scatter-canvas] { display: block; height: auto; max-width: 100%; width: 100%; }

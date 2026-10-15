@@ -13,8 +13,9 @@ The earlier `.voo` format combined a manifest, Rust, and CSS in one custom file.
 It was useful for validating the first component-island idea, but it required a
 parallel parser and formatter and hid Rust from normal rust-analyzer and Cargo
 tooling. It also created a second source of truth for the public contract. The
-Rust-file path removes those costs. Any remaining `.voo` code is transitional
-compatibility coverage, not the beta authoring recommendation.
+Rust-file path removes those costs. Current development has removed that
+implementation and migrated its acceptance fixtures; see
+[the migration boundary](retired-authoring.md). Historical releases are unchanged.
 
 ## Beta product boundary
 

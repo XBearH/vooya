@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-export async function assertBindingsRetry(source, { runtimeSpecifier, exports, legacyFactory }) {
+export async function assertBindingsRetry(source, { runtimeSpecifier, exports, runtimeHelpers }) {
   const runtimeUrl = moduleUrl(`
     // Independent initialization state for ${runtimeSpecifier}.
     export const state = { loads: 0 };
@@ -14,13 +14,11 @@ export async function assertBindingsRetry(source, { runtimeSpecifier, exports, l
     export function voo_abi_version() { return 1; }
     ${exports.map((name) => `export function ${name}() {}`).join("\n")}
   `);
-  const adapterUrl = moduleUrl(legacyFactory
-    ? `export function ${legacyFactory}(loadBindings) { return { loadBindings }; }`
-    : "export function defineVooyaComponent(bridge) { return bridge; }");
+  const adapterUrl = moduleUrl("export function defineVooyaComponent(bridge) { return bridge; }");
   const generated = await import(moduleUrl(source
     .replace(JSON.stringify(runtimeSpecifier), JSON.stringify(runtimeUrl))
     .replace('"@vooya/vue"', JSON.stringify(adapterUrl))
-    .replace('"@vooya/vite/runtime"', JSON.stringify(new URL("../dist/runtime.js", import.meta.url).href))));
+    .replace(JSON.stringify(runtimeHelpers ? "./runtime.js" : "@vooya/vite/runtime"), JSON.stringify(runtimeHelpers ?? new URL("../dist/runtime.js", import.meta.url).href))));
   const runtime = await import(runtimeUrl);
   const load = generated.default.loadBindings;
 

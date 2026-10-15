@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("runs reactive state and keyed rows from a TaskList.voo component", async ({ page }) => {
+test("runs reactive state and keyed rows from a TaskList.rs component", async ({ page }) => {
   const browserErrors = [];
   page.on("console", (message) => {
     if (message.type() === "error") browserErrors.push(message.text());

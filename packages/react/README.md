@@ -9,8 +9,7 @@ npm install --save-dev @vooya/vite@beta
 
 Configure `vooya({ framework: "react" })` after `@vitejs/plugin-react`, then
 import a Rust-file `.rs` component as a normal React component. Generated
-declarations expose its props and event callbacks to TypeScript. The retired
-`.voo` path is not a supported authoring format.
+declarations expose its props and event callbacks to TypeScript. The source format is ordinary Rust.
 
 Rust-file authoring uses ordinary `.rs` files. A `#[voo::component]` import is
 exposed as a React component, while a `#[voo::store]` import exposes a generated
@@ -34,16 +33,9 @@ the instance once; cleanup errors do not replace the initialization error.
 An instance that finishes loading after unmount is disposed without subscribing;
 late errors and factory callbacks are suppressed because its owner is inactive.
 
-## Legacy `.voo` prop defaults
-
-A `.voo` prop declared with a default (for example `name: String = "world"`) is
-optional in the generated React props, and the default is passed to the WASM
-`mount` when the consumer omits the prop. Explicit values — including `false`,
-`0`, and `""` — are passed through untouched.
-
-The same resolution applies to later prop updates: if a consumer removes a
-previously set prop, the declared default is passed again. This matches the
-`@vooya/vue` adapter's semantics.
+Optional Rust props use `Option<T>`. Apply any default explicitly in Rust,
+for example `props.initial.unwrap_or(0)`, so the same behavior applies on mount
+and later updates.
 
 This package is published on the `beta` channel. Package versions are
 independent; install the adapter and Vite integration from the same channel

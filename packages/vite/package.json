@@ -13,7 +13,6 @@
     "access": "public"
   },
   "bin": {
-    "voo-format": "./bin/voo-format.mjs",
     "vooya": "./bin/vooya.mjs"
   },
   "files": [
@@ -32,17 +31,13 @@
       "types": "./dist/build-core.d.ts",
       "import": "./dist/build-core.js"
     },
-    "./format": {
-      "types": "./dist/voo-format.d.ts",
-      "import": "./dist/voo-format.js"
-    },
     "./runtime": {
       "types": "./dist/runtime.d.ts",
       "import": "./dist/runtime.js"
     }
   },
   "scripts": {
-    "build": "npm run build --prefix ../compiler && npm run build --prefix ../build-core && tsc -p tsconfig.json",
+    "build": "npm run build --prefix ../compiler && npm run build --prefix ../build-core && node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "npm run build && node --test src/*.test.js"
   },

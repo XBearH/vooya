@@ -273,7 +273,7 @@ test("maps copied Rust diagnostics back to the authored source", () => {
       rendered: `error: cannot find value\n --> ${generated}:4:9\n  |\n4 | missing\n  | ^^^^^^^\n`,
       spans: [{ file_name: generated, line_start: 4, column_start: 9 }],
     },
-    new Map([[generated, { id: authored, startLine: 1, generatedLineOffset: 0 }]]),
+    new Map([[generated, { id: authored }]]),
     generatedRoot,
   );
 

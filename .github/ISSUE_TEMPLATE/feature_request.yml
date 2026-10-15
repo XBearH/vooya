@@ -20,7 +20,7 @@ body:
     attributes:
       label: Primary user
       options:
-        - .voo component author
+        - Rust component author
         - Web application developer
         - Component package publisher
         - Vooya contributor or maintainer

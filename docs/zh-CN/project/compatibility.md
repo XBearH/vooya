@@ -61,7 +61,7 @@ SvelteKit、SSR/hydration、Rspack/Webpack 或其他浏览器已经兼容。fixt
 在卸载子组件后断言 Component handle 与 generated Store 各调用一次 `dispose()`。
 
 当前 main 的 `test:vite-plus-frameworks` 还覆盖快速连续保存及宿主组件更新；Rust 编辑使用整页刷新，
-不承诺保留状态。`test:vite-plus` 单独保留旧 `.voo` 回归。依赖按官方 alias/overrides
+不承诺保留状态。`test:vite-plus` 也验证普通 Rust 源码和依赖重建。依赖按官方 alias/overrides
 配置即可正常 npm 安装，不需要 legacy peer resolver。范围限定为上述版本的 dev/build，
 不推导其他 Vite+ 版本、其全部工具或 SSR 支持。配置见 [Vite+ 接入](../guide/other-integrations.md#vite)。
 
@@ -74,6 +74,17 @@ Rspack 2.1.10 与 Vue/React 的 `.rs` Component、Store、props/event、scoped C
 CSS 更新、新增 `.rs` 和产物不会造成循环重建。Next.js/SSR、Webpack/Rspack
 下的 Solid/Svelte 尚未完成验收。
 
+## 已实现的接入为什么仍标为实验性
+
+| 接入 | 已有实现与证据 | 仍缺少的验收 |
+| --- | --- | --- |
+| Managed preset | 固定工具版本、独立缓存、校验和、锁与重试；三平台源码打包消费者和[全新缓存 registry 消费者](https://github.com/vooyajs/vooya/actions/runs/37583146228) | 物理上未安装 Rust 的宿主、完整安装中断恢复；仍需要宿主 SDK/linker；musl Linux、Windows arm64 不在 managed 目标内 |
+| Webpack / Rspack | Vue/React Rust Component/Store、生产资源与浏览器生命周期；Vue watch 的编译错误恢复、样式修改与新增模块 | React 开发服务器矩阵、Solid/Svelte 消费者、精确 registry 包组合的浏览器验收，以及更多操作系统与浏览器 |
+
+[Alpha 发布记录](../../maintainers/releases/0.2.0-alpha.0.md#executed-registry-consumers)
+区分了源码 tarball 与精确 registry 版本的证据。移除旧源码格式不会自动补齐这些验收，
+也不会改变历史 npm 发布版本。
+
 ## 0.2 Alpha：SSR 接入
 
 当前源码将 Vue Store 的创建推迟到浏览器挂载，并保留 React 的客户端边界。
@@ -85,6 +96,7 @@ props/event、独立 Store 和路由清理。服务端渲染的是宿主容器�
 
 Safari/WebKit、移动浏览器、Rollup、Turbopack 和未列出的
 bundler 没有当前兼容性声明。没有正式预编译组件产品；保留的 Vue fixture
-只是 build-contract 证据。`.voo` 是已退休的探索格式，不能作为新组件输入。
+只是 build-contract 证据。当前开发线只接受普通 Rust 源码，
+历史版本保持原状；见[迁移说明](./retired-authoring.md)。
 
 查看每项命令和完整边界请看[英文兼容性矩阵](../../project/compatibility.md)。

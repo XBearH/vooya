@@ -1,7 +1,8 @@
 # Rust 编写
 
 Rust-file authoring 是当前 beta 的组件和 store 路径。使用普通 `.rs` 文件、
-role attributes 和 `rsx!`；`.voo` 只是已经退休的早期探索格式。
+role attributes 和 `rsx!`。当前开发线只接受普通 Rust 文件；
+旧格式迁移见[退役说明](../project/retired-authoring.md)。
 
 ## Vooya 属性标记
 

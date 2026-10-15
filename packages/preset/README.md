@@ -59,6 +59,11 @@ compiler error and recovery, and ordinary production build and browser interacti
 They block ambient Rust commands but retain the host SDK/linker. Hosted CI runners
 may still have Rust installed; these tests do not certify physically Rust-free hosts.
 
+Published `0.2.0-alpha.0` registry consumers passed with fresh caches on Linux,
+macOS and Windows at `a9e7692`; see the [registry acceptance run](https://github.com/vooyajs/vooya/actions/runs/37583146228).
+This verifies the published package graph with host SDKs retained, not a
+machine with only Node.js installed.
+
 The existing **Experimental integrations** workflow accepts `managed_source=registry`
 for an explicit release-acceptance run of the same three-platform matrix; it skips
 unrelated integration jobs. Normal pull requests continue testing source tarballs.

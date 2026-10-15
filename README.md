@@ -105,15 +105,17 @@ documented installation path rather than assigning one version to every package.
 | Development | Rust rebuilds reload the page; Rust state is not preserved |
 | Distribution | Precompiled consumption has test evidence; a supported precompiled component product is not published |
 
-Rspack and Webpack integrations remain experimental. Their npm `beta` packages
-cover the legacy `.voo` path; Rust `.rs` authoring requires the **0.2 alpha**
-package set. Production browser tests cover Vue and React; Rust watch recovery
+Rspack and Webpack integrations remain experimental: they have working
+implementations with a limited acceptance matrix. Rust `.rs` authoring requires
+the **0.2 alpha** package set; the older non-Vite beta packages do not implement
+that path. Production browser tests cover Vue and React; Rust watch recovery
 is verified for Vue. Other framework/watch combinations are not yet verified.
 
 See the [compatibility matrix](https://vooyajs.com/project/compatibility),
 [project status](https://vooyajs.com/project/status), and
 [alpha installation guide](https://vooyajs.com/project/next-release) for exact
-versions and verified combinations.
+versions and verified combinations. The current development line has removed
+the custom source format and its tooling; see the [migration guide](docs/project/retired-authoring.md).
 
 ## Learn more
 

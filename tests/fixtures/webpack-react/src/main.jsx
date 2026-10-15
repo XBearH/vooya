@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
-import Counter from "./Counter.voo";
+import Counter from "./Counter.rs";
 
 function App() {
   const [initial, setInitial] = useState(2);

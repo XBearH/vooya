@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import Counter from "./Counter.voo";
+import Counter from "./Counter.rs";
 
 const value = ref(2);
 const visible = ref(true);

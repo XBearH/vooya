@@ -1,9 +1,8 @@
 # `@vooya/vite`
 
 Compile Rust components and stores from ordinary `.rs` files with Vite `>=7 <9`
-and import them as Vue, React, Solid, or Svelte modules. The retired `.voo`
-path remains in repository regression fixtures only and is not a supported
-authoring format.
+and import them as Vue, React, Solid, or Svelte modules. This development line
+accepts Rust sources only; see the [migration guide](../../docs/project/retired-authoring.md).
 
 ```sh
 npm install --save-dev @vooya/vite@beta
@@ -50,5 +49,4 @@ root. Use `rust.entry` when the application already owns a crate root.
 
 Use `npx vooya clean` to remove generated state.
 
-Format components with `npx voo-format src` or check them with
-`npx voo-format --check src`.
+Format Rust sources with `rustfmt`. Referenced styles live in ordinary CSS files.

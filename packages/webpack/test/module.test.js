@@ -1,46 +1,30 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import loader from "../dist/loader.js";
+import { deleteBuildState, setBuildState } from "../dist/state.js";
+import { vooyaWebpack } from "../dist/index.js";
 
-import { parseVooComponent } from "@vooya/compiler";
-
-import { renderVooModule } from "../dist/module.js";
-
-const source = `<component name="Counter">
-props:
-  initial: i32
-events:
-  changed(value: i32)
-</component>
-<rust>
-pub fn mount(_context: Context) -> Result<Component, wasm_bindgen::JsValue> { Ok(Component {}) }
-pub struct Component {}
-impl Component { pub fn dispose(&mut self) {} pub fn update_initial(&self, _value: i32) {} }
-</rust>`;
-
-test("renders a Vue wrapper with the Webpack runtime and expected ABI", () => {
-  const component = parseVooComponent(source, "/consumer/src/Counter.voo");
-  assert.equal(component.format, "source");
-  component.id = "/consumer/src/Counter.voo";
-  const generated = renderVooModule({
-    component,
-    framework: "vue",
-    runtimeModule: "/consumer/.vooya/wasm/webpack/1/vooya_app.js",
-    styleModule: "/consumer/.vooya/cache/webpack/styles/counter.css",
-  });
-  assert.match(generated, /@vooya\/vue/);
-  assert.match(generated, /@vooya\/webpack\/runtime/);
-  assert.match(generated, /assertVooAbiVersion\(voo_abi_version\(\), 1\)/);
-  assert.match(generated, /export const metadata/);
+test("source loader rule only handles ordinary Rust files", () => {
+  const rule = vooyaWebpack().rule();
+  assert.equal(rule.test.test("Counter.rs"), true);
+  assert.equal(rule.test.test("Counter.ts"), false);
 });
 
-test("selects the React adapter", () => {
-  const component = parseVooComponent(source, "/consumer/src/Counter.voo");
-  assert.equal(component.format, "source");
-  component.id = "/consumer/src/Counter.voo";
-  const generated = renderVooModule({
-    component,
-    framework: "react",
-    runtimeModule: "/consumer/.vooya/wasm/webpack/1/vooya_app.js",
-  });
-  assert.match(generated, /@vooya\/react/);
+test("loader returns the current prepared Rust module and disables caching", () => {
+  const instanceId = "loader-cache-test";
+  const resourcePath = "/app/Counter.rs";
+  const calls = [], dependencies = [];
+  setBuildState(instanceId, { runtimeModule: "/cache/vooya_app-next.js",
+    workspaceRoot: "/app/.vooya", rustModules: new Map([[resourcePath, "export default 'next';"]]),
+    generationFile: "/app/.vooya/cache/generation", watchedRoots: [], styleDependencies: [],
+    wasm: new Uint8Array(), wasmAssetName: "vooya_app-next.wasm" });
+  try {
+    const context = { resourcePath, cacheable(value) { calls.push(value); },
+      getOptions() { return { instanceId }; }, addDependency(path) { dependencies.push(path); } };
+    assert.equal(loader.call(context), "export default 'next';");
+    assert.deepEqual(calls, [false]);
+    assert.ok(dependencies.includes(resourcePath));
+    context.resourcePath = "/app/Missing.rs";
+    assert.throws(() => loader.call(context), /Check rust.sourceRoot and rust.entry/);
+  } finally { deleteBuildState(instanceId); }
 });

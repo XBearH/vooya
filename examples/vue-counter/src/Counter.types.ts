@@ -1,4 +1,4 @@
-import Counter from "./Counter.voo";
+import Counter from "./Counter.rs";
 
 type CounterProps = InstanceType<typeof Counter>["$props"];
 type CounterEmit = InstanceType<typeof Counter>["$emit"];
@@ -8,7 +8,7 @@ const validProps: CounterProps = { initial: 1 };
 // @ts-expect-error initial is generated as a required number prop.
 const invalidProps: CounterProps = { initial: "1" };
 
-// @ts-expect-error initial is required by the .voo contract.
+// @ts-expect-error initial is required by the .rs contract.
 const missingProps: CounterProps = {};
 
 declare const emit: CounterEmit;

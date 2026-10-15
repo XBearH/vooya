@@ -1,4 +1,4 @@
-import VooyaGrid from "./VooyaGrid.voo";
+import VooyaGrid from "./VooyaGrid.rs";
 
 type GridProps = InstanceType<typeof VooyaGrid>["$props"];
 

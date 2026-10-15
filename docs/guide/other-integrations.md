@@ -146,14 +146,14 @@ Octane remains a private workspace experiment outside this release matrix.
 packed consumers: `.rs` components and Stores, production browser interactions,
 strict generated declarations, development rebuilds, Rust error recovery and
 host component edits. Rust edits trigger a full page reload, not state-preserving
-HMR. `npm run test:vite-plus` separately retains the legacy `.voo` regression.
+HMR. `npm run test:vite-plus` also exercises Rust source and dependency rebuilds.
 These checks cover Vite+ dev/build integration at the pinned version; they do
 not cover every bundled Vite+ tool or imply SSR support.
 
 ## Experimental Rspack path
 
 ::: warning Rust-file support requires 0.2 alpha
-The npm 0.1 beta adapter covers transitional `.voo` regression fixtures.
+The npm 0.1 beta adapter does not implement ordinary Rust-file integration; use the documented opt-in 0.2 alpha package graph.
 Use the matching alpha.0 bundler and Vue/React adapter packages for the `.rs`
 configuration below. The [alpha installation guide](../project/next-release.md)
 records exact versions; SSR and unlisted framework combinations remain unverified.
@@ -186,7 +186,7 @@ versions are not support claims. Exact fixture evidence currently uses 2.1.10.
 ## Experimental Webpack 5 path
 
 ::: warning Rust-file support requires 0.2 alpha
-The npm 0.1 beta adapter covers transitional `.voo` regression fixtures.
+The npm 0.1 beta adapter does not implement ordinary Rust-file integration; use the documented opt-in 0.2 alpha package graph.
 Use the matching alpha.0 bundler and Vue/React adapter packages for the `.rs`
 configuration below. The [alpha installation guide](../project/next-release.md)
 records exact versions; SSR and unlisted framework combinations remain unverified.

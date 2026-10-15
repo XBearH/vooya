@@ -1,5 +1,5 @@
 import { createApp, h, ref } from "vue";
-import Counter from "./Counter.voo";
+import Counter from "./Counter.rs";
 
 const initial = ref(2);
 const event = ref("");

@@ -39,30 +39,6 @@ test("reports stable Rust/WASM build stages with their elapsed duration", () => 
   ]);
 });
 
-test("uses compiler output when generating a source component virtual module", () => {
-  const root = mkdtempSync(resolve(tmpdir(), "vooya-plugin-"));
-  const id = resolve(root, "Counter.voo");
-  writeFileSync(id, `<component name="Counter">
-props:
-  initial: i32 = 0
-events:
-  change(value: i32)
-</component>
-<rust>pub struct Component;</rust>
-<style scoped>.counter { color: red; }</style>`);
-  try {
-    const plugin = vooya();
-    plugin.configResolved({ root });
-
-    const output = plugin.load.call({}, `${id}?import`);
-    assert.match(output, /voo_counter_mount/);
-    assert.match(output, /scopeId/);
-    assert.match(output, /"initial","type":"number","required":false,"defaultValue":0/);
-  } finally {
-    rmSync(root, { force: true, recursive: true });
-  }
-});
-
 test("resolves Rust-file imports with Vite query parameters", () => {
   const plugin = vooya();
   const importer = "/consumer/src/App.vue?vue&type=script";

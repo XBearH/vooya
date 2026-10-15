@@ -1,5 +1,5 @@
 <script setup>
-import PortableCounter from "./PortableCounter.voo";
+import PortableCounter from "./PortableCounter.rs";
 </script>
 
 <template>

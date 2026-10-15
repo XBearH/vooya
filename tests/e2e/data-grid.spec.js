@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("runs filtering, sorting, virtualization, and measurement from VooyaGrid.voo", async ({
+test("runs filtering, sorting, virtualization, and measurement from VooyaGrid.rs", async ({
   page,
 }) => {
   const browserErrors = [];
