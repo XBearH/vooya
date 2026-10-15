@@ -87,7 +87,7 @@ and infer the snapshot and declared actions from its Store type. Prefer generate
 | `useVooyaStore` | `(store \| PromiseLike<store>, options?)` | — | Custom integration or shared-instance ownership | Vue `>=3.5.2 <4`; not the primary generated hook |
 | `source` | `VooyaStore \| PromiseLike<VooyaStore>` | required | Pass an instance or generated async store factory | The late instance is disposed if the component unmounts first |
 | `disposeOnUnmount` | `boolean` | `false` | Give this component ownership of disposal | Use `true` for an instance-scoped store; shared stores need an explicit owner |
-| `onError` | `(cause: unknown) => void` | — | Receive async creation failures | It does not retry or hide action errors |
+| `onError` | `(cause: unknown) => void` | — | Receive creation, attachment, and notification snapshot failures | It does not retry or hide action errors |
 
 `useVooyaStore` is an adapter-level API, not the primary cross-framework Store
 entry point and not Vapor-only. This section shows the Vue signature; the other
@@ -111,8 +111,15 @@ a successful value; typed action results are tracked in [Issue #152](https://git
 | Generated component | React component props | — | Import a `#[voo::component]` `.rs` file | React `>=19`; `import Counter from "./Counter.rs"` |
 | Generated hook | `useName(options?)` | — | Consume a `#[voo::store]` `.rs` file | Uses `useSyncExternalStore`; one store instance per hook lifetime |
 | `useVooyaStore` | `(factory, props, options?)` | — | Build a custom adapter or shared-instance integration | Advanced API; factory may return a store or Promise |
-| `onError` | callback | — | Observe creation failures | Reports generated or custom factory creation failures; it does not receive Rust domain events |
+| `onError` | callback | — | Observe creation and subscription failures | It does not receive Rust domain events |
 | `onNotify` | `(name: string, payload: unknown) => void` | — | Instrument a custom factory | Forwarded to custom factories, also in Solid and Svelte; not a typed generated Store event channel |
+
+Current development source also reports React Store subscription failures through
+the latest active `onError` callback and disposes the failed instance once.
+Cleanup failures during attachment do not replace the original initialization
+error. Late initialization after unmount disposes the instance without
+subscribing; late errors and factory callbacks are suppressed. This fix is
+unreleased and does not describe existing npm artifacts.
 
 ## `@vooya/solid`
 
@@ -125,7 +132,7 @@ framework-neutral bridge is wrapped with Solid owners, signals, and cleanup;
 | Generated component | Solid component props | — | Import a `#[voo::component]` `.rs` file | Solid `>=1.9 <2`; callback props use `onEventName` |
 | Generated primitive | `useName(options?)` | — | Consume a `#[voo::store]` `.rs` file | `const { state, add } = useCart(); state()?.count` |
 | `useVooyaStore` | `(factory, props, options?)` | — | Build a custom adapter or shared-instance integration | Advanced API; factory may return a store or Promise |
-| `onError` | `(cause: unknown) => void` | — | Observe an asynchronous factory failure | Cleanup is tied to the current Solid owner |
+| `onError` | `(cause: unknown) => void` | — | Observe Store creation, attachment, and notification snapshot failures | Cleanup is tied to the current Solid owner |
 | `onNotify` | callback field forwarded to a custom factory | — | Advanced factory-specific instrumentation | Generated Solid Stores publish state through subscription; they do not expose a separate notification bus |
 
 The shared generated names intentionally do not force one reactive container
@@ -145,7 +152,7 @@ framework-neutral bridge is wrapped with Svelte component lifecycle and a
 | Generated component | Svelte component props | — | Import a `#[voo::component]` `.rs` file | Svelte `>=5 <6`; callback props use `onEventName` |
 | Generated Store entry | `useName(options?)` | — | Consume a `#[voo::store]` `.rs` file | `const { state, add } = useCart()`; template reads `$state?.count` |
 | `useVooyaStore` | `(factory, props, options?)` | — | Build a custom adapter or shared-instance integration | Advanced API; factory may return a Store or Promise |
-| `onError` | `(cause: unknown) => void` | — | Observe an asynchronous factory failure | Component and generated Store cleanup are tied to Svelte destruction |
+| `onError` | `(cause: unknown) => void` | — | Observe Store creation, attachment, and notification snapshot failures | Component and generated Store cleanup are tied to Svelte destruction |
 | `onNotify` | callback field forwarded to a custom factory | — | Advanced factory-specific instrumentation | Generated Svelte Stores publish through `Readable`; no separate notification bus is documented |
 
 Generated Store domain notifications are not yet available in any first-party
@@ -157,6 +164,16 @@ The current evidence is Svelte 5 + Vite 7 + Chromium. It covers Component
 mount and callback, Store action, Component prop update, generated declarations,
 and one cleanup call each for the Component handle and generated Store. It does
 not cover Svelte 3/4, SvelteKit, SSR, hydration, Vite 8, Rspack, or Webpack.
+
+In current development source, Vue, Solid, and Svelte report Store creation,
+initial snapshot, and subscription failures through `onError` and clear failed
+bindings. Owned instances are released once; Vue custom sources retain their
+`disposeOnUnmount` policy. A notification snapshot failure preserves the last
+good state and a later notification may recover. Cleanup attempts disposal even
+if unsubscribe throws. Cleanup failures during attachment preserve the original
+error; normal unmount cleanup errors use the framework lifecycle error handling.
+Late resolution disposes the instance without attaching it. These fixes are
+unreleased.
 
 ## `@vooya/rspack`
 

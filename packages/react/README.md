@@ -28,6 +28,12 @@ The generated `.d.rs.ts` declaration includes the store interface, the
 Rust snapshots preserve JavaScript identity until their value changes, which is
 required by `useSyncExternalStore`.
 
+In the current development source, Store factory and subscription failures
+reach the active owner's latest `onError` callback. Failed attachment releases
+the instance once; cleanup errors do not replace the initialization error.
+An instance that finishes loading after unmount is disposed without subscribing;
+late errors and factory callbacks are suppressed because its owner is inactive.
+
 ## Legacy `.voo` prop defaults
 
 A `.voo` prop declared with a default (for example `name: String = "world"`) is

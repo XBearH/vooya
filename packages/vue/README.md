@@ -20,5 +20,16 @@ This package is published on the `beta` channel. Package versions are
 independent; install the adapter and Vite integration from the same channel
 and retain your lockfile.
 
+Current development source routes Store creation, initial snapshot, and
+subscription failures to `onError`, clears the failed binding, and releases
+owned instances once. Notification snapshot failures retain the last good
+state and allow later notifications to recover. Cleanup always attempts disposal
+even if unsubscribe throws; cleanup errors during failed attachment preserve
+the original error. Normal unmount cleanup errors follow the framework's
+lifecycle error handling. These changes are not yet released.
+
+Custom Vue sources are disposed only with `disposeOnUnmount: true`; pending
+Stores that resolve after unmount are still disposed immediately.
+
 See the [framework capability matrix](https://github.com/vooyajs/vooya/blob/main/docs/project/compatibility.md#beta-framework-capabilities)
 for the beta support level and tested consumer paths.

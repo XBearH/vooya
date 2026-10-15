@@ -151,3 +151,74 @@ test("optional Boolean props preserve absence, null and explicit defaults", asyn
   }
   assert.equal(disposed, 1);
 });
+
+test("Store attachment failures respect ownership and notification failures can recover", async () => {
+  const dom = new JSDOM("<div id='app'></div>");
+  for (const key of ["window", "document", "Node", "Element", "HTMLElement", "SVGElement"]) {
+    globalThis[key] = dom.window[key];
+  }
+  const { createApp, h } = await import("vue");
+  const { useVooyaStore } = await import("../dist/index.js");
+  try {
+    for (const asynchronous of [false, true]) {
+      for (const stage of ["getSnapshot", "subscribe"]) {
+        for (const owned of [false, true]) {
+          const cause = new Error(stage);
+          const errors = [];
+          let disposed = 0;
+          let binding;
+          const store = {
+            getSnapshot: () => 1,
+            subscribe: () => () => {},
+            dispose() { disposed++; throw new Error("cleanup failed"); },
+            [stage]() { throw cause; },
+          };
+          const app = createApp({ setup() {
+            binding = useVooyaStore(asynchronous ? Promise.resolve(store) : store, {
+              disposeOnUnmount: owned, onError: (error) => errors.push(error),
+            });
+            return () => h("span");
+          } });
+          app.mount(document.querySelector("#app"));
+          try {
+            await new Promise((resolve) => setImmediate(resolve));
+            assert.deepEqual(errors, [cause]);
+            assert.equal(binding.snapshot.value, undefined);
+            assert.throws(() => binding.dispatch("add", 1), /not ready/);
+          } finally {
+            app.unmount();
+          }
+          assert.equal(disposed, owned ? 1 : 0);
+        }
+      }
+    }
+    let listener;
+    let value = 1;
+    const cause = new Error("snapshot failed");
+    const errors = [];
+    let binding;
+    const app = createApp({ setup() {
+      binding = useVooyaStore({
+        getSnapshot() { if (value === 2) throw cause; return value; },
+        subscribe(next) { listener = next; return () => { listener = undefined; }; },
+        dispose() {},
+      }, { onError: (error) => errors.push(error) });
+      return () => h("span");
+    } });
+    app.mount(document.querySelector("#app"));
+    try {
+      value = 2;
+      listener();
+      assert.deepEqual(errors, [cause]);
+      assert.equal(binding.snapshot.value, 1);
+      value = 3;
+      listener();
+      assert.equal(binding.snapshot.value, 3);
+    } finally {
+      app.unmount();
+    }
+    assert.equal(listener, undefined);
+  } finally {
+    dom.window.close();
+  }
+});
