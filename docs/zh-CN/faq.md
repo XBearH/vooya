@@ -20,14 +20,15 @@
 
 ## `.voo` 怎么了？
 
-`.voo` 是验证 island model 时的中间探索格式，已经退休；新组件使用普通
-`.rs`、role attributes 和 `rsx!`。
+当前开发线已经移除自定义格式、parser、formatter 和旧 loader 分支。组件和 Store
+统一使用普通 `.rs`、role attributes 和独立 CSS。历史发布版本保持原状，
+迁移方法见[格式退役说明](./project/retired-authoring.md)。
 
 ## Webpack/Rspack 支持吗？
 
-有 experimental first-party adapter。Vite 是主路径；Rspack 证据下限为 2.1.10，
-Webpack 为 5。已发布 beta.0 仅有 legacy `.voo` fixture；普通 `.rs` 接入是 main
-的未发布 0.2 候选，新项目先用 Vite。未列版本、SSR、hydration、Turbopack 等都不能推断支持。
+可选的 0.2 alpha 已有普通 Rust 文件接入，并验证了 Vue/React 生产路径和 Vue watch
+失败恢复。其他 framework/watch 组合仍未完整验收，所以标为实验性；不是空包或仅有设计。
+Vite 仍是主路径，详见[兼容性矩阵](./project/compatibility.md)。
 
 ## 已发布 Beta 有哪些 framework adapter？
 

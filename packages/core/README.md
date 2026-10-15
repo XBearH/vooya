@@ -5,8 +5,8 @@ Rust and browser runtime used by the Vooya component compiler.
 The package contains the Rust runtime source and the public `vooya` authoring
 crate consumed by `@vooya/vite`, plus baseline wasm-bindgen output. Application
 code normally imports generated `.rs` components/stores instead of importing
-this package directly. Retired `.voo` inputs remain only in repository
-regression fixtures and are not a supported authoring format.
+this package directly. Current examples and acceptance fixtures use ordinary
+Rust files and schema-driven bindings.
 
 This package is a beta. Rust-file source compilation requires Cargo, the
 `wasm32-unknown-unknown` target, and the matching `wasm-bindgen` CLI.

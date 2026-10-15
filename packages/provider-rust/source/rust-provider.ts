@@ -1,5 +1,6 @@
 // Rust reference provider: owns source discovery, Cargo/wasm-bindgen, schema
 // extraction and transactional build artifacts. Bundlers use the public facade.
+import { VOO_ABI_VERSION } from "@vooya/compiler/abi";
 import { execFileSync, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { cpSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -12,14 +13,6 @@ import { resolveRustBuildOptions } from "./cargo-manifest.js";
 import type { RustBuildOptions, RustDependency } from "./cargo-manifest.js";
 import { resolveToolchain } from "./toolchain.js";
 import type { ResolvedToolchain, ToolchainEnvironment } from "./toolchain.js";
-import {
-  compileVooStyle,
-  generateRustComponents,
-  generateVooDeclaration,
-  generatedAdapterDefinition,
-  generatedComponentPrelude,
-} from "@vooya/compiler";
-import type { SourceComponent } from "@vooya/compiler";
 import {
   ensureVooyaWorkspace,
   resolveVooyaWorkspace,
@@ -79,7 +72,6 @@ export type BuildExec = (
 
 export interface BuildApplicationOptions {
   applicationRoot: string;
-  components?: SourceComponent[];
   rust?: RustBuildOptions;
   runtimeCrateRoot?: string;
   workspaceRoot?: string;
@@ -199,10 +191,12 @@ export function resolveVooyaCrateRoot(
 }
 
 /** Discover authored Rust modules without requiring a manifest edit. */
-export function discoverRustSourceFiles(applicationRoot: string, configuredRoot = "src"): string[] {
+export function discoverRustSourceFiles(applicationRoot: string, configuredRoot = "src", excludedRoots: readonly string[] = []): string[] {
   const sourceRoot = resolve(applicationRoot, configuredRoot);
   const files: string[] = [];
+  const excluded = new Set(excludedRoots.map((directory) => resolve(applicationRoot, directory)));
   const visit = (directory: string): void => {
+    if (excluded.has(resolve(directory))) return;
     const entries = (() => {
       try {
         return readdirSync(directory, { withFileTypes: true, encoding: "utf8" });
@@ -230,8 +224,6 @@ export interface BuildApplicationResult extends BuildArtifact {
 
 interface DiagnosticMapping {
   id: string;
-  startLine: number;
-  generatedLineOffset: number;
 }
 
 interface CargoDiagnostic {
@@ -275,8 +267,8 @@ export function resolveRustDependencyRoots(
 }
 
 /**
- * Build compiler results into a reusable WASM application artifact. `components`
- * are the parsed `.voo` compiler results; callers retain all bundler-specific IO.
+ * Build authored Rust into a reusable WASM application artifact.
+ * Callers retain all bundler-specific IO.
  */
 export function buildApplication(options: BuildApplicationOptions): BuildApplicationResult {
   if (!options.applicationRoot) throw new Error("Vooya build requires applicationRoot.");
@@ -291,7 +283,6 @@ export function buildApplication(options: BuildApplicationOptions): BuildApplica
 
 function buildApplicationUnlocked({
   applicationRoot,
-  components = [],
   rust = {},
   runtimeCrateRoot = resolveRuntimeCrateRoot(),
   workspaceRoot,
@@ -311,33 +302,18 @@ function buildApplicationUnlocked({
   workspacePath ??= workspace.build;
   outputDir ??= workspace.wasm;
 
-  const sourceDir = resolve(workspacePath, "src/components");
   const rustSourceDir = resolve(workspacePath, "src/rust");
   const targetDir = resolve(workspacePath, "target");
-  const sourcePaths = new Map<string | undefined, string>();
   const diagnosticMappings = new Map<string, DiagnosticMapping>();
 
-  mkdirSync(sourceDir, { recursive: true });
   // This directory is generated state. Reconcile it on every build so removed
   // or renamed source files cannot remain as phantom Rust modules.
   removeDirectory(rustSourceDir);
   mkdirSync(rustSourceDir, { recursive: true });
-  for (const [index, component] of components.entries()) {
-    const sourcePath = resolve(sourceDir, `${index}-${component.name}.rs`);
-    const prelude = generatedComponentPrelude(component);
-    writeIfChanged(sourcePath, `${prelude}${component.rust.content}\n`);
-    sourcePaths.set(component.id, sourcePath);
-    diagnosticMappings.set(sourcePath, {
-      id: component.id ?? component.name,
-      startLine: component.rust.startLine,
-      generatedLineOffset: prelude.split(/\r?\n/).length - 1,
-    });
-  }
-
   const authoredEntry = resolveVooyaCrateRoot(applicationRoot, rust.entry);
   const configuredSourceRoot = rust.sourceRoot ?? "src";
   const rustFiles = [...new Set([
-    ...discoverRustSourceFiles(applicationRoot, configuredSourceRoot),
+    ...discoverRustSourceFiles(applicationRoot, configuredSourceRoot, [workspace.root]),
     ...(rust.files ?? []).map((file) => resolve(applicationRoot, file)),
   ])];
   const copiedRustFiles: string[] = [];
@@ -348,8 +324,6 @@ function buildApplicationUnlocked({
     writeIfChanged(destination, readFileSync(file, "utf8"));
     diagnosticMappings.set(destination, {
       id: file,
-      startLine: 1,
-      generatedLineOffset: 0,
     });
     copiedRustFiles.push(`rust/${relativePath}`);
   }
@@ -360,8 +334,6 @@ function buildApplicationUnlocked({
     writeIfChanged(destination, readFileSync(authoredEntry, "utf8"));
     diagnosticMappings.set(destination, {
       id: authoredEntry,
-      startLine: 1,
-      generatedLineOffset: 0,
     });
     copiedRustFiles.push(`rust/${relativePath}`);
   }
@@ -393,7 +365,7 @@ function buildApplicationUnlocked({
       })();
   writeIfChanged(
     resolve(workspacePath, "src/lib.rs"),
-    `pub use vooya_core::*;\n\n${authoredModule}\n\n${generateRustComponents(components, sourcePaths)}`,
+    `pub use vooya_core::*;\n\n${authoredModule}\n\n#[wasm_bindgen::prelude::wasm_bindgen]\npub fn voo_abi_version() -> u32 { ${VOO_ABI_VERSION} }\n`,
   );
 
   onRustBuildStart();
@@ -453,9 +425,7 @@ function buildApplicationUnlocked({
       : { version: 1 as const, records: [] };
     const schemaIndex = indexVooyaSchema(schema);
     validateVooyaSchemaGroups(schemaIndex);
-    const abiVersions = components.map(
-      (component) => generatedAdapterDefinition(component).abiVersion,
-    );
+    const abiVersions = [VOO_ABI_VERSION];
     const runtimeModule = resolve(outputDir, "vooya_app.js");
     const wasm = resolve(outputDir, "vooya_app_bg.wasm");
     const schemaContracts = buildRustComponentContracts(schemaIndex);
@@ -465,33 +435,17 @@ function buildApplicationUnlocked({
       javascript: { path: runtimeModule, code: readFileSync(resolve(stagingOutputDir, "vooya_app.js"), "utf8") },
       wasm: { path: wasm, bytes: wasmBytes },
       schema,
-      css: components
-        .filter((component) => component.style)
-        .map((component) => ({
-          componentId: component.id ?? component.name,
-          code: compileVooStyle(component),
+      css: [],
+      declarations: [
+        ...schemaContracts.map((contract) => ({
+          componentId: contract.component.id, framework,
+          code: generateRustSchemaDeclaration({ contract, framework, types: schemaIndex.types }),
         })),
-      declarations: components.length > 0
-        ? components.map((component) => {
-            if (framework === "octane") throw new Error("Octane supports Rust .rs sources only.");
-            return {
-              componentId: component.id ?? component.name,
-              framework,
-              code: generateVooDeclaration(component, framework),
-            };
-          })
-        : [
-          ...schemaContracts.map((contract) => ({
-            componentId: contract.component.id,
-            framework,
-            code: generateRustSchemaDeclaration({ contract, framework, types: schemaIndex.types }),
-          })),
-          ...schemaIndex.stores.map((store) => ({
-            componentId: store.id,
-            framework,
-            code: generateRustStoreDeclaration(store, framework, schemaIndex.types),
-          })),
-        ],
+        ...schemaIndex.stores.map((store) => ({
+          componentId: store.id, framework,
+          code: generateRustStoreDeclaration(store, framework, schemaIndex.types),
+        })),
+      ],
       watchedFiles: [
         ...(resolvedRust.manifestPath ? [resolvedRust.manifestPath] : []),
         resolve(runtimeCrateRoot, "src"),
@@ -529,8 +483,7 @@ function buildApplicationUnlocked({
       const source = cause.source;
       const mapping = diagnosticMappings.get(resolve(workspacePath, source.file)) ?? diagnosticMappings.get(resolve(source.file));
       if (mapping) {
-        const line = source.line === undefined ? undefined : mapping.startLine + source.line - 1 - mapping.generatedLineOffset;
-        throw new RustSnapshotSchemaError(cause.storeId, cause.fieldPath, cause.reason, { ...source, file: mapping.id, line });
+        throw new RustSnapshotSchemaError(cause.storeId, cause.fieldPath, cause.reason, { ...source, file: mapping.id });
       }
     }
     throw cause;
@@ -769,13 +722,10 @@ export function remapRustDiagnostic(
   for (const span of message.spans ?? []) {
     const mapping = mappings.get(resolve(generatedRoot, span.file_name)) ?? mappings.get(resolve(span.file_name));
     if (!mapping) continue;
-    const line = mapping.startLine + span.line_start - 1 - mapping.generatedLineOffset;
-    rendered = rendered
-      .replaceAll(
-        `${span.file_name}:${span.line_start}:${span.column_start}`,
-        `${mapping.id}:${line}:${span.column_start}`,
-      )
-      .replace(new RegExp(`(\\n\\s*)${span.line_start}(\\s+\\|)`), `$1${line}$2`);
+    rendered = rendered.replaceAll(
+      `${span.file_name}:${span.line_start}:${span.column_start}`,
+      `${mapping.id}:${span.line_start}:${span.column_start}`,
+    );
   }
   return rendered;
 }

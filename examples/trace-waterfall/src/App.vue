@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import TraceWaterfall from "./TraceWaterfall.voo";
+import TraceWaterfall from "./TraceWaterfall.rs";
 import VueTraceWaterfall from "./VueTraceWaterfall.vue";
 </script>
 

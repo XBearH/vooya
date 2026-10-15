@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import VooyaGrid from "./VooyaGrid.voo";
+import VooyaGrid from "./VooyaGrid.rs";
 import VueGrid from "./VueGrid.vue";
 </script>
 

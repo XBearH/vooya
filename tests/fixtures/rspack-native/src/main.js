@@ -1,2 +1,2 @@
-import Counter from "./Counter.voo";
+import Counter from "./Counter.rs";
 console.log(Counter);

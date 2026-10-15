@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import RustScatterPlot from "./RustScatterPlot.voo";
+import RustScatterPlot from "./RustScatterPlot.rs";
 
 const points = ref(150_000);
 </script>
@@ -11,7 +11,7 @@ const points = ref(150_000);
       <p class="eyebrow">Vue host + Rust island</p>
       <h1>150,000 point scatter plot</h1>
       <p class="intro">
-        Vue owns this page and its input. The <code>.voo</code> component owns point generation,
+        Vue owns this page and its input. The <code>.rs</code> component owns point generation,
         canvas rendering, and zooming inside its DOM subtree.
       </p>
     </header>

@@ -75,3 +75,13 @@ resources contributors under [CC BY-NC-SA 4.0](https://github.com/rstackjs/rstac
 See also [webpack's artwork license](https://github.com/webpack/media/blob/master/LICENSE),
 [Svelte's branding guidelines](https://github.com/sveltejs/branding), and
 [Go's brand guidelines](https://go.dev/brand).
+
+## Status markers
+
+The asterisk means an implemented integration has a limited acceptance matrix;
+it does not mean the package is empty. The preset installs pinned native tools
+but still needs the host SDK/linker. Webpack/Rspack exercise ordinary Rust sources
+with Vue/React; other framework/watch combinations remain unverified. See
+[the acceptance gaps](../project/compatibility.md#why-some-implemented-integrations-remain-experimental).
+The current development line no longer loads the custom source format; keep
+architecture captions aligned with [the migration boundary](../project/retired-authoring.md).

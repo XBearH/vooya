@@ -177,27 +177,28 @@ unreleased.
 
 ## `@vooya/rspack`
 
-The beta.0 Rspack and Webpack implementations still expose a legacy `.voo`
-loader rule for their experimental fixtures. `.voo` is retired as a new
-authoring format and is scheduled for removal; use Rust-file authoring through
-the primary Vite path until those adapters are migrated.
+Rust-file integration first shipped in the opt-in `0.2.0-alpha.0` package graph.
+This reference describes the current development API. Its loader handles `.rs`
+only; older published packages are unchanged by the [format retirement](../project/retired-authoring.md).
 
-| Export / parameter | Type / values | Default | When to use | Current boundary / minimal example |
-| --- | --- | --- | --- | --- |
-| `vooyaRsbuild(options?)` | `VooyaRsbuildPlugin` | — | Add Vooya to Rsbuild | Experimental; Rspack `>=2.1.10`, Rsbuild `>=2.1.13` |
-| `vooyaRspack(options?)` | `VooyaRspackPlugin` | — | Configure Rspack directly | Experimental; add `plugins: [vooya]` and `vooya.rule()` |
-| `framework` | `"vue" \| "react"` | `"vue"` | Select the host adapter | Current fixtures use the transitional `.voo` path; Rust-file parity is not claimed |
-| `rust`, `workspaceRoot` | Rust options, filesystem path | `{}`, `.vooya/` | Share Rust deps or move generated state | Experimental adapter options; see the package README |
-| `rule()` | `{ test: /\.voo$/, loader, options }` | — | Add the source loader to direct Rspack | Public rule is for the current transitional `.voo` fixture path |
+| Export / parameter | Type / values | Default | Current boundary |
+| --- | --- | --- | --- |
+| `vooyaRsbuild(options?)` | `VooyaRsbuildPlugin` | — | Rspack `>=2.1.10`, Rsbuild `>=2.1.13` |
+| `vooyaRspack(options?)` | `VooyaRspackPlugin` | — | Add `plugins: [vooya]` and `vooya.rule()` |
+| `framework` | `"vue" \| "react" \| "solid" \| "svelte"` | `"vue"` | Vue/React have production browser coverage; Solid/Svelte bundler combinations remain unverified |
+| `rust`, `workspaceRoot`, `toolchain` | Rust options, workspace path, tool selection | `{}`, `.vooya/`, auto | Share dependencies and select system or managed tools |
+| `rule()` | `{ test: /\.rs$/, loader, options }` | — | Import schema-owning Rust Component/Store files |
 
 ## `@vooya/webpack`
 
-| Export / parameter | Type / values | Default | When to use | Current boundary / minimal example |
-| --- | --- | --- | --- | --- |
-| `vooyaWebpack(options?)` | `VooyaWebpackPlugin` | — | Add Vooya to Webpack 5 | Experimental; Webpack `>=5` |
-| `framework` | `"vue" \| "react"` | `"vue"` | Select the host adapter | Current fixtures use the transitional `.voo` path; Rust-file parity is not claimed |
-| `rust`, `workspaceRoot` | Rust options, filesystem path | `{}`, `.vooya/` | Share Rust deps or move generated state | Experimental adapter options; see the package README |
-| `rule()` | `{ test: /\.voo$/, use: [{ loader, options }] }` | — | Add the source loader to Webpack | Requires normal framework, CSS, and async WASM config |
+| Export / parameter | Type / values | Default | Current boundary |
+| --- | --- | --- | --- |
+| `vooyaWebpack(options?)` | `VooyaWebpackPlugin` | — | Webpack `>=5`; configure normal framework, CSS and async WASM rules |
+| `framework` | `"vue" \| "react" \| "solid" \| "svelte"` | `"vue"` | Vue/React have production browser coverage; other combinations remain unverified |
+| `rust`, `workspaceRoot`, `toolchain` | Rust options, workspace path, tool selection | `{}`, `.vooya/`, auto | Shared Rust build options |
+| `rule()` | `{ test: /\.rs$/, use: [{ loader, options }] }` | — | Rust source loader; Webpack watch uses a generated runtime marker |
 
-No Web Components, precompiled artifact consumer, SSR, hydration, or general
-renderer API is currently published as part of these packages.
+Vue Rust watch covers failure recovery, linked CSS edits, and new modules.
+React production coverage does not establish React development-server parity.
+These packages do not establish Next.js, SSR, hydration, state-preserving HMR,
+or a published precompiled component product.

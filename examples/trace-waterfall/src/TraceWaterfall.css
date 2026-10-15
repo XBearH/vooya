@@ -1,0 +1,6 @@
+.trace-waterfall { background: white; border: 1px solid #d9e1e4; box-shadow: 0 10px 24px rgba(24,47,57,.08); padding: 14px; }
+.trace-toolbar { display: flex; flex-wrap: wrap; gap: 8px; } .trace-toolbar button, .trace-toolbar select { background: #f7fbfb; border: 1px solid #b9cdcf; min-height: 30px; }
+[data-summary] { color: #52616d; display: block; font-size: 13px; font-variant-numeric: tabular-nums; margin: 10px 0; }
+.trace-axis { color: #71808a; display: flex; font-size: 12px; justify-content: space-between; margin-left: 42%; }
+.trace-viewport { border-top: 1px solid #d9e1e4; height: 350px; overflow-y: auto; position: relative; } [data-spacer] { min-height: 100%; position: relative; } [data-rows] { left: 0; position: absolute; right: 0; top: 0; }
+.trace-row { align-items: center; display: flex; height: 25px; white-space: nowrap; } .trace-row:nth-child(odd) { background: #f7fafb; } .trace-name { font-family: ui-monospace, monospace; font-size: 11px; overflow: hidden; text-overflow: ellipsis; width: 42%; } .trace-bar { background: #287a76; height: 14px; min-width: 2px; } .trace-row.critical .trace-bar { background: #ca5b2c; }

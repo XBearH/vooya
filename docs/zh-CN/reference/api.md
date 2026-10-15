@@ -154,26 +154,25 @@ Vite 8、Rspack 或 Webpack。
 
 ## `@vooya/rspack`
 
-beta.0 的 Rspack 和 Webpack 实现仍为 experimental fixture 暴露 legacy `.voo`
-loader rule。`.voo` 已作为新 authoring format 退休并计划移除；在这些 adapter
-完成迁移前，请使用主要的 Vite Rust-file 路径。
+普通 Rust 文件接入已随可选的 `0.2.0-alpha.0` 包组合发布。这里描述当前开发线 API，
+loader 只匹配 `.rs`；已经发布的旧版本保持原状。迁移要求见[格式退役说明](../project/retired-authoring.md)。
 
-| 导出/参数 | 类型/取值 | 默认值 | 何时使用 | 当前边界/最小例子 |
-| --- | --- | --- | --- | --- |
-| `vooyaRsbuild(options?)` | `VooyaRsbuildPlugin` | — | 接入 Rsbuild | Experimental；Rspack `>=2.1.10`、Rsbuild `>=2.1.13` |
-| `vooyaRspack(options?)` | `VooyaRspackPlugin` | — | 直接配置 Rspack | Experimental；`plugins: [vooya]` + `vooya.rule()` |
-| `framework` | `"vue" \| "react"` | `"vue"` | 选择宿主 adapter | 当前 fixture 仍是 transitional `.voo`；未宣称 Rust-file parity |
-| `rust`、`workspaceRoot` | Rust options、文件路径 | `{}`、`.vooya/` | 共享依赖或移动 generated state | Experimental adapter options |
-| `rule()` | `{ test: /\.voo$/, loader, options }` | — | 直接 Rspack 加 source loader | 针对 transitional `.voo` fixture |
+| 导出/参数 | 类型/取值 | 默认值 | 当前边界 |
+| --- | --- | --- | --- |
+| `vooyaRsbuild(options?)` | `VooyaRsbuildPlugin` | — | Rspack `>=2.1.10`、Rsbuild `>=2.1.13` |
+| `vooyaRspack(options?)` | `VooyaRspackPlugin` | — | `plugins: [vooya]` + `vooya.rule()` |
+| `framework` | `"vue" \| "react" \| "solid" \| "svelte"` | `"vue"` | Vue/React 有生产浏览器验证；Solid/Svelte 打包器组合尚未验证 |
+| `rust`、`workspaceRoot`、`toolchain` | Rust 选项、工作目录、工具链选择 | `{}`、`.vooya/`、auto | 共享依赖并选择系统或托管工具 |
+| `rule()` | `{ test: /\.rs$/, loader, options }` | — | 加载有 schema 的 Rust Component/Store 文件 |
 
 ## `@vooya/webpack`
 
-| 导出/参数 | 类型/取值 | 默认值 | 何时使用 | 当前边界/最小例子 |
-| --- | --- | --- | --- | --- |
-| `vooyaWebpack(options?)` | `VooyaWebpackPlugin` | — | 接入 Webpack 5 | Experimental；Webpack `>=5` |
-| `framework` | `"vue" \| "react"` | `"vue"` | 选择宿主 adapter | 当前 fixture 仍是 transitional `.voo`；未宣称 Rust-file parity |
-| `rust`、`workspaceRoot` | Rust options、文件路径 | `{}`、`.vooya/` | 共享依赖或移动 generated state | Experimental adapter options |
-| `rule()` | `{ test: /\.voo$/, use: [{ loader, options }] }` | — | 接入 Webpack source loader | 还需要正常 framework、CSS 和 async WASM 配置 |
+| 导出/参数 | 类型/取值 | 默认值 | 当前边界 |
+| --- | --- | --- | --- |
+| `vooyaWebpack(options?)` | `VooyaWebpackPlugin` | — | Webpack `>=5`；需要普通 framework、CSS 和 async WASM 配置 |
+| `framework` | `"vue" \| "react" \| "solid" \| "svelte"` | `"vue"` | Vue/React 有生产浏览器验证；其他组合尚未验证 |
+| `rust`、`workspaceRoot`、`toolchain` | Rust 选项、工作目录、工具链选择 | `{}`、`.vooya/`、auto | 共享 Rust 构建选项 |
+| `rule()` | `{ test: /\.rs$/, use: [{ loader, options }] }` | — | Rust loader；watch 依赖生成的 runtime marker |
 
-已发布 Beta 没有公开 Web Components、预编译 artifact consumer、SSR、hydration 或
-通用 renderer API。
+Vue 的 Rust watch 覆盖失败恢复、关联 CSS 修改和新模块。React 生产验证不等于开发服务器
+已经完整验收。这些包也不代表 Next.js、SSR、hydration、保留状态的 HMR 或已发布预编译组件产品。

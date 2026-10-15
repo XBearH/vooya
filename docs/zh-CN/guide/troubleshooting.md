@@ -64,7 +64,7 @@ MSVC host 需要 Visual Studio Build Tools 的 **Desktop development with C++**
 修复报错指向的 Rust 行并再次保存。已发布 Beta 的 Vite Rust-file 路径会尝试
 从失败构建恢复；成功的 Rust rebuild 会触发整页 reload，不保留组件 state。
 Rspack/Webpack 的普通 `.rs` watch 恢复已在 Alpha 的具名用例验证；
-不要将它与 beta.0 的 legacy `.voo` fixture 混淆，见[Bundler 指南](./bundlers.md)。
+不要将它与较早的非 Vite beta 集成混淆，见[Bundler 指南](./bundlers.md)。
 
 ## 源码没有出现在生成结果中
 

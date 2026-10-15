@@ -1,10 +1,10 @@
 import postcss from "postcss";
 import parser from "postcss-selector-parser";
 
-import { generatedScopeId } from "./codegen.js";
-import type { CodegenComponent } from "./types.js";
+import { generatedScopeId } from "./scope.js";
+import type { ComponentStyleInput } from "./types.js";
 
-export function compileVooStyle(component: CodegenComponent): string {
+export function compileComponentStyle(component: ComponentStyleInput): string {
   if (!component.style) return "";
   const root = postcss.parse(component.style.content, { from: component.id });
   if (!component.style.scoped) return root.toString();
@@ -23,7 +23,7 @@ export function compileVooStyle(component: CodegenComponent): string {
 function scopeHostSelector(
   selector: string,
   scope: string,
-  component: CodegenComponent,
+  component: ComponentStyleInput,
   rule: postcss.Rule,
 ): string {
   parser((root) => {

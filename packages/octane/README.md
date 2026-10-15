@@ -50,6 +50,6 @@ the consuming application so hook slots and runtime versions agree. Configure
 See [Octane's library contract](https://octanejs.dev/docs/publishing-libraries).
 
 Current scope: client-side Rust components and stores through Vite. Legacy
-`.voo`, SSR/hydration, Strong mode, and other bundlers are not verified for this
+SSR/hydration, Strong mode, and other bundlers are not verified for this
 adapter. Run `node tests/rust-octane-source.mjs` from the repository for the
 packed-package production browser check.

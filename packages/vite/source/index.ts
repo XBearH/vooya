@@ -1,6 +1,6 @@
+import { compileComponentStyle } from "@vooya/compiler";
 import type { Plugin, Logger } from "vite";
 import type { RustComponentContract, RustStoreSchema, ResolvedToolchain } from "@vooya/build-core";
-import type { SourceComponent } from "@vooya/compiler";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import {
@@ -16,19 +16,11 @@ import {
   buildRustComponentContracts,
   indexVooyaSchema,
   writeRustSchemaDeclarations,
-  writeVooDeclarations,
   renderRustComponentModule,
   renderRustStoreModule,
 } from "@vooya/build-core";
 import type { RustBuildOptions } from "@vooya/build-core";
 import { createBuildScheduler } from "./build-scheduler.js";
-import {
-  compileVooStyle,
-  generatedAdapterDefinition,
-  generatedComponentBinding,
-  parseVooComponent,
-} from "@vooya/compiler";
-import { readVooComponents } from "./voo-project.js";
 import { inspectGeneratedTypesConfiguration } from "./typescript-config.js";
 import {
   indexRustRecordsByFile,
@@ -38,12 +30,10 @@ import {
   unresolvedRustImportMessage,
 } from "./module-resolution.js";
 
-const componentExtension = ".voo";
 const rustExtension = ".rs";
 // Match Vite's explicit raw asset query; normal imports still compile.
 const rawQuery = /(?:\?|&)raw(?:&|$)/;
 const runtimeId = "virtual:vooya-runtime";
-const stylePrefix = "virtual:vooya-style:";
 const rustStylePrefix = "virtual:vooya-rust-style:";
 
 export type VooyaFramework = "vue" | "react" | "solid" | "svelte" | "octane";
@@ -68,7 +58,6 @@ export function vooya({
   let buildScheduler: ReturnType<typeof createBuildScheduler> | undefined;
   let runtimeModule: string | undefined;
   let toolchain: ResolvedToolchain | undefined;
-  let sourceComponents: SourceComponent[] = [];
   let rustContracts: RustComponentContract[] = [];
   let rustStores: RustStoreSchema[] = [];
   let rustContractsByFile = new Map<string, RustComponentContract>();
@@ -82,16 +71,12 @@ export function vooya({
     if (!isVooyaSourceChange(file, generatedWorkspaceRoot, watchedRustRoots)) return;
     buildScheduler?.schedule();
     // The generated WASM module owns live component handles. Letting the
-    // framework hot-replace a .voo importer first would run cleanup against a
+    // framework hot-replace a Rust importer first would run cleanup against a
     // newly initialized WASM instance, so only send our post-build reload.
     return [];
   };
 
   const compile = () => {
-    const components = applicationRoot ? readVooComponents(applicationRoot) : [];
-    sourceComponents = components.filter((component) => component.format === "source");
-    if (framework === "octane" && components.length > 0) throw new Error("Octane supports Rust .rs sources; legacy .voo sources are not supported.");
-    if (framework !== "octane") writeVooDeclarations({ applicationRoot, components, framework, workspaceRoot: workspaceOptions.root });
     const progress = createRustBuildProgress(logger);
     try {
       if (!toolchain) {
@@ -107,7 +92,6 @@ export function vooya({
       }
       const buildResult = buildApplication({
         applicationRoot,
-        components: sourceComponents,
         rust,
         framework,
         workspaceRoot: generatedWorkspaceRoot,
@@ -120,25 +104,23 @@ export function vooya({
       rustStores = schemaIndex.stores;
       rustContractsByFile = new Map();
       rustStoresByFile = new Map();
-      if (sourceComponents.length === 0) {
-        rustContractsByFile = indexRustRecordsByFile(applicationRoot, rustContracts, (contract: RustComponentContract) => contract.component.group);
-        rustStoresByFile = indexRustRecordsByFile(applicationRoot, rustStores, (store) => store.group);
-        writeRustSchemaDeclarations({
-          applicationRoot,
-          contracts: rustContracts,
-          stores: schemaIndex.stores,
-          types: schemaIndex.types,
-          framework,
-          workspaceRoot: workspaceOptions.root,
-        });
-      }
+      rustContractsByFile = indexRustRecordsByFile(applicationRoot, rustContracts, (contract: RustComponentContract) => contract.component.group);
+      rustStoresByFile = indexRustRecordsByFile(applicationRoot, rustStores, (store) => store.group);
+      writeRustSchemaDeclarations({
+        applicationRoot,
+        contracts: rustContracts,
+        stores: schemaIndex.stores,
+        types: schemaIndex.types,
+        framework,
+        workspaceRoot: workspaceOptions.root,
+      });
       progress.complete();
     } catch (error) {
       if (isToolchainExecutionError(error)) {
         toolchain = undefined;
         clearToolchainCache();
       }
-      // Cargo has already rendered source-mapped .voo diagnostics. Keep this
+      // Cargo has already rendered source-mapped Rust diagnostics. Keep this
       // summary separate so Vite can preserve those diagnostics verbatim.
       progress.fail();
       throw error;
@@ -171,12 +153,11 @@ export function vooya({
     },
     resolveId(source, importer, options) {
       if (source === runtimeId) return runtimeModule;
-      if (source.startsWith(stylePrefix)) return source;
       if (source.startsWith(rustStylePrefix)) return source;
       if (rawQuery.test(source)) return null;
       if (!importer) return null;
       const sourcePath = modulePath(source);
-      if (!sourcePath.endsWith(rustExtension) && !sourcePath.endsWith(componentExtension)) return null;
+      if (!sourcePath.endsWith(rustExtension)) return null;
       // Preserve Vite's root, alias and package semantics without re-entering
       // this plugin for the delegated request.
       return this.resolve(source, importer, { ...options, skipSelf: true });
@@ -184,12 +165,6 @@ export function vooya({
     load(id) {
       if (rawQuery.test(id)) return null;
       const cleanId = modulePath(id);
-      if (cleanId.startsWith(stylePrefix)) {
-        const componentId = decodeURIComponent(cleanId.slice(stylePrefix.length, -4));
-        const component = parseVooComponent(readFileSync(componentId, "utf8"), componentId);
-        if (component.format !== "source") this.error("Vooya style modules require source components.");
-        return compileVooStyle({ ...component, id: componentId });
-      }
       if (cleanId.startsWith(rustStylePrefix)) {
         const payload: unknown = JSON.parse(Buffer.from(cleanId.slice(rustStylePrefix.length, -4), "base64url").toString("utf8"));
         if (!isRustStylePayload(payload)) this.error("Invalid Vooya Rust style module payload.");
@@ -202,12 +177,9 @@ export function vooya({
           return readFileSync(stylePath, "utf8");
         }).join("\n");
         const scoped = styles.some((style) => style.scoped);
-        return compileVooStyle({
+        return compileComponentStyle({
           id: componentId,
           name: componentName,
-          props: [],
-          events: [],
-          rust: { content: "" },
           style: { content, scoped },
         });
       }
@@ -223,79 +195,7 @@ export function vooya({
         }
         this.error(unresolvedRustImportMessage(cleanId, applicationRoot, rust));
       }
-      if (!cleanId.endsWith(componentExtension)) return null;
-      const component = parseVooComponent(readFileSync(cleanId, "utf8"), cleanId);
-      if (component.format === "source") {
-        component.id = cleanId;
-        const { exportName, disposeName, updateNames } = generatedComponentBinding(component);
-        const definition = generatedAdapterDefinition(component);
-        const adapter = adapterPackage(framework);
-        return `
-          ${component.style ? `import "${stylePrefix}${encodeURIComponent(cleanId)}.css";` : ""}
-          import init, { ${exportName}, ${disposeName}, ${Object.values(updateNames).join(", ")}${Object.keys(updateNames).length ? ", " : ""}voo_abi_version } from "${runtimeId}";
-          import { defineVooyaComponent } from "${adapter}";
-          import { assertVooAbiVersion, initializeWasm } from "@vooya/vite/runtime";
-
-          let bindings;
-          async function loadBindings() {
-            if (!bindings) {
-              bindings = initializeWasm(init).then(() => {
-                assertVooAbiVersion(voo_abi_version());
-                return {
-                  mount(host, ...props) {
-                    const handle = ${exportName}(host, ...props);
-                    return {
-                      dispose() { ${disposeName}(handle); },
-                      ${Object.entries(updateNames).map(([prop, name]) => `update_${prop}(value) { ${name}(handle, value); }`).join(",\n                      ")}
-                    };
-                  }
-                };
-              }).catch((cause) => {
-                bindings = undefined;
-                throw cause;
-              });
-            }
-            return bindings;
-          }
-
-          export const metadata = ${JSON.stringify(componentMetadata(component))};
-          export default defineVooyaComponent({
-            contract: ${JSON.stringify(definition)},
-            loadBindings,
-          });
-        `;
-      }
-      const adapter = adapterPackage(framework);
-      const factory = component.adapters[framework];
-      if (!factory) {
-        this.error(`Unsupported Voo component ${component.name} for framework ${framework}.`);
-      }
-
-      return `
-        import init, { ${component.exportName} } from "${component.runtime}";
-        import { ${factory} } from "${adapter}";
-
-        let bindings;
-        async function loadBindings() {
-          if (!bindings) {
-            bindings = init().then(() => ({ ${component.exportName} })).catch((cause) => {
-              bindings = undefined;
-              throw cause;
-            });
-          }
-          return bindings;
-        }
-
-        export const metadata = ${JSON.stringify({
-          name: component.name,
-          runtime: component.runtime,
-          export: component.exportName,
-          adapters: component.adapters,
-          props: component.props,
-          events: component.events,
-        })};
-        export default ${factory}(loadBindings);
-      `;
+      return null;
     },
     configureServer(server) {
       const resolvedRust = resolveRustBuildOptions(applicationRoot, rust);
@@ -354,15 +254,6 @@ function isToolchainExecutionError(error: unknown) {
   );
 }
 
-function componentMetadata(component: SourceComponent) {
-  return {
-    abiVersion: generatedAdapterDefinition(component).abiVersion,
-    name: component.name,
-    props: component.props,
-    events: component.events,
-  };
-}
-
 export function generateRustComponentModule(contract: RustComponentContract, framework: VooyaFramework = "vue", componentId = contract.component.group ?? contract.component.name) {
   const styles = contract.component.styles ?? [];
   const styleModule = styles.length
@@ -392,12 +283,6 @@ export const generateRustSvelteStoreModule = (store: RustStoreSchema) => generat
 function isSupportedFramework(framework: unknown): framework is VooyaFramework {
   return framework === "vue" || framework === "react" || framework === "solid" || framework === "svelte" || framework === "octane";
 }
-
-function adapterPackage(framework: VooyaFramework) {
-  if (!isSupportedFramework(framework)) throw new Error(`Unknown Vooya framework ${framework}.`);
-  return `@vooya/${framework}`;
-}
-
 
 interface RustStylePayload { componentId: string; name: string; styles?: { path: string; scoped: boolean }[] }
 function isRustStylePayload(value: unknown): value is RustStylePayload {

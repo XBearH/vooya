@@ -2,8 +2,8 @@
 // public plugin and loader protocols and is currently verified against 2.1.10.
 import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
-import { readdirSync, readFileSync, mkdirSync, writeFileSync, statSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { writeFileSync, statSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
@@ -12,16 +12,12 @@ import {
   rustInputFingerprint,
   resolveVooyaWorkspace,
   resolveToolchain,
-  writeVooDeclarations,
 } from "@vooya/build-core";
 import type { BuildApplicationResult, RustBuildOptions } from "@vooya/build-core";
-import { parseVooComponent } from "@vooya/compiler";
-import type { SourceComponent } from "@vooya/compiler";
 
 import { deleteBuildState, getBuildState, setBuildState } from "./state.js";
 
 const loaderPath = fileURLToPath(new URL("./loader.js", import.meta.url));
-const ignoredDirectories = new Set([".git", ".vooya", "dist", "node_modules", "target"]);
 let nextInstance = 0;
 
 export interface VooyaRspackOptions {
@@ -131,7 +127,7 @@ export class VooyaRspackPlugin implements RspackPluginLike {
 
   rule(): VooyaRspackRule {
     return {
-      test: /\.(voo|rs)$/,
+      test: /\.rs$/,
       loader: loaderPath,
       options: { framework: this.framework, instanceId: this.instanceId },
     };
@@ -155,12 +151,10 @@ export class VooyaRspackPlugin implements RspackPluginLike {
         : undefined;
       try {
         const applicationRoot = compiler.context;
-        const components = readVooComponents(applicationRoot);
         const workspace = resolveVooyaWorkspace(applicationRoot, this.workspaceRoot);
         const workspacePath = resolve(workspace.build, "rspack");
         const result = buildApplication({
           applicationRoot,
-          components,
           toolchain: resolveToolchain({ cwd: applicationRoot, ...this.toolchain }),
           rust: this.rust,
           workspaceRoot: workspace.root,
@@ -169,24 +163,13 @@ export class VooyaRspackPlugin implements RspackPluginLike {
           buildMode: compiler.options.mode === "development" ? "development" : "production",
           framework: this.framework,
         });
-        writeVooDeclarations({
-          applicationRoot,
-          components,
-          framework: this.framework,
-          workspaceRoot: workspace.root,
-        });
-        const styleModules = writeGeneratedFiles({
-          components,
-          result,
-          stylesRoot: resolve(workspace.cache, "rspack/styles"),
-        });
         const buildId = createHash("sha256").update(result.wasm.bytes).digest("hex").slice(0, 16);
         const versionedRuntime = writeVersionedRuntime(result, buildId);
-        const rustModules = components.length === 0 ? prepareRustModules({
+        const rustModules = prepareRustModules({
           applicationRoot, workspaceRoot: workspace.root, schema: result.schema,
           framework: this.framework, runtimeModule: versionedRuntime.runtimeModule,
           runtimeHelpers: "@vooya/rspack/runtime", stylesRoot: resolve(workspace.cache, "rspack/rust-styles"),
-        }) : { modules: new Map<string, string>(), dependencies: [] };
+        });
         this.buildId = buildId;
         setBuildState(this.instanceId, {
           // wasm-bindgen's JavaScript is often byte-for-byte stable across
@@ -195,10 +178,9 @@ export class VooyaRspackPlugin implements RspackPluginLike {
           runtimeModule: versionedRuntime.runtimeModule,
           wasm: result.wasm.bytes,
           wasmAssetName: versionedRuntime.wasmAssetName,
-          styleModules,
           rustModules: rustModules.modules,
           workspaceRoot: workspace.root,
-          watchedRoots: [...result.watchedFiles, ...components.map((component) => component.id)],
+          watchedRoots: [...result.watchedFiles],
           styleDependencies: rustModules.dependencies,
         });
         this.inputFingerprint = inputFingerprint;
@@ -281,27 +263,6 @@ export function vooyaRsbuild(options: VooyaRspackOptions = {}): VooyaRsbuildPlug
   };
 }
 
-type PreparedSourceComponent = SourceComponent & { id: string };
-
-function readVooComponents(root: string): PreparedSourceComponent[] {
-  return readVooFiles(root).map((id) => {
-    const component = parseVooComponent(readFileSync(id, "utf8"), id);
-    component.id = id;
-    return component;
-  }).filter((component): component is PreparedSourceComponent => component.format === "source");
-}
-
-function readVooFiles(directory: string): string[] {
-  const files: string[] = [];
-  for (const entry of readdirSync(directory, { withFileTypes: true })) {
-    if (ignoredDirectories.has(entry.name)) continue;
-    const path = join(directory, entry.name);
-    if (entry.isDirectory()) files.push(...readVooFiles(path));
-    else if (entry.isFile() && entry.name.endsWith(".voo")) files.push(path);
-  }
-  return files;
-}
-
 function writeVersionedRuntime(
   result: BuildApplicationResult,
   buildId: string,
@@ -319,36 +280,4 @@ function writeVersionedRuntime(
   writeFileSync(runtimeModule, runtimeCode);
   writeFileSync(resolve(outputDirectory, wasmAssetName), result.wasm.bytes);
   return { runtimeModule, wasmAssetName };
-}
-
-function writeGeneratedFiles({
-  components,
-  result,
-  stylesRoot,
-}: {
-  components: PreparedSourceComponent[];
-  result: BuildApplicationResult;
-  stylesRoot: string;
-}): Map<string, string> {
-  const styles = new Map<string, string>();
-  const css = new Map(result.css.map((style) => [style.componentId, style.code]));
-  for (const [index, component] of components.entries()) {
-    const style = css.get(component.id);
-    if (style === undefined) continue;
-    const stylePath = resolve(stylesRoot, `${index}-${component.name}.css`);
-    mkdirSync(dirname(stylePath), { recursive: true });
-    writeIfChanged(stylePath, style);
-    styles.set(component.id, stylePath);
-  }
-  return styles;
-}
-
-function writeIfChanged(path: string, content: string): void {
-  try {
-    if (readFileSync(path, "utf8") === content) return;
-  } catch (error) {
-    if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
-  }
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, content);
 }

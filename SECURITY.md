@@ -29,7 +29,7 @@ surface, and coordinate disclosure after a fix or mitigation is available.
 
 Useful reports include vulnerabilities in published Vooya packages, generated
 Rust/WASM build behavior, package or artifact integrity, development-server
-exposure, and unsafe handling of user-controlled `.voo` input.
+exposure, and unsafe handling of user-controlled Rust sources, schemas, or artifacts.
 
 Ordinary build failures, unsupported Rust crates, and unverified performance
 claims should use the normal bug report template instead.

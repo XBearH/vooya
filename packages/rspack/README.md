@@ -2,8 +2,7 @@
 
 Experimental Rspack `>=2.1.10` integration for Rust-file components and Stores.
 Import `.rs` files directly; the plugin builds WASM, generates the framework
-bridge, and writes declarations under `.vooya/types`. The legacy `.voo` loader
-remains available for existing projects.
+bridge, and writes declarations under `.vooya/types`. The current loader matches `.rs` only; see the [migration guide](../../docs/project/retired-authoring.md).
 
 The package supports Vue and React applications through Rsbuild, and exposes a
 lower-level Rspack plugin and loader rule for applications that configure
@@ -75,7 +74,7 @@ entry, HTML, and CSS configuration.
 - Rsbuild 2.1.13 with Vue and React browser lifecycle checks;
 - Rslib 0.23.2 production library output;
 - production WASM/CSS emission;
-- source `.voo` rebuild, mapped Rust diagnostics, and failed-build recovery.
+- Rust source rebuild, mapped Rust diagnostics, and failed-build recovery.
 
 SSR, hydration, Module Federation, state-preserving HMR, and Rspack versions
 below 2.1.10 are not compatibility claims. Exact fixture evidence currently
@@ -88,4 +87,4 @@ scoped CSS, Store actions, props/events, and unmount/remount. The Vue Rust-file
 fixture also checks watch error recovery, stylesheet updates, newly added Rust
 modules, and that generated assets do not cause a rebuild loop. Rust-file
 Rsbuild/Rslib parity and Solid/Svelte browser acceptance are not yet verified;
-the older `.voo` fixtures retain their separate evidence.
+the additional Rsbuild, Rslib, and direct-Rspack fixtures use Rust sources.

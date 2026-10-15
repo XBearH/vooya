@@ -46,7 +46,7 @@ try {
   writeFileSync(dependencyPath, dependency.replace("value * 2", "value * 3"));
   await expectText(page, "9");
 
-  const componentPath = resolve(project, "src/PortableCounter.voo");
+  const componentPath = resolve(project, "src/PortableCounter.rs");
   const source = readFileSync(componentPath, "utf8");
   const invalid = source.replace(
     ".text(&display_value(context.props.initial).to_string())",

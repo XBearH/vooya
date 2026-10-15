@@ -10,8 +10,6 @@ import {
 } from "node:fs";
 import { dirname, isAbsolute, parse, posix, relative, resolve } from "node:path";
 
-import { generateVooDeclaration } from "@vooya/compiler";
-import type { ParsedComponent } from "@vooya/compiler";
 import { generateRustSchemaDeclaration, generateRustStoreDeclaration } from "./schema-declarations.js";
 import type { RustComponentContract } from "./schema.js";
 import type { RustStoreSchema } from "./schema.js";
@@ -40,14 +38,8 @@ export interface VooyaWorkspaceMetadata {
   };
 }
 
-export interface WriteVooDeclarationsOptions {
-  applicationRoot: string;
-  components: ParsedComponent[];
-  framework: "vue" | "react" | "solid" | "svelte";
-  workspaceRoot?: string;
-}
 
-export interface WrittenVooDeclarations {
+export interface WrittenRustDeclarations {
   typesRoot: string;
   files: string[];
 }
@@ -133,58 +125,6 @@ export function cleanVooyaWorkspace(
   return paths;
 }
 
-export function writeVooDeclarations({
-  applicationRoot,
-  components,
-  framework,
-  workspaceRoot,
-}: WriteVooDeclarationsOptions): WrittenVooDeclarations {
-  const application = resolve(applicationRoot);
-  const paths = resolveVooyaWorkspace(application, workspaceRoot);
-  ensureVooyaWorkspace(paths);
-
-  const expected = new Set<string>();
-  for (const component of components) {
-    if (component.format !== "source") continue;
-    if (!component.id) {
-      throw new Error(`Vooya component ${component.name} is missing its source path.`);
-    }
-    const componentPath = resolve(component.id);
-    const sourceRelativePath = relative(application, componentPath);
-    if (
-      sourceRelativePath === "" ||
-      isAbsolute(sourceRelativePath) ||
-      sourceRelativePath === ".." ||
-      sourceRelativePath.startsWith("../") ||
-      sourceRelativePath.startsWith("..\\")
-    ) {
-      throw new Error(
-        `Vooya component ${component.id} must be inside application root ${application}.`,
-      );
-    }
-    if (!sourceRelativePath.endsWith(".voo")) {
-      throw new Error(`Vooya component ${component.id} must end in .voo.`);
-    }
-    const declarationPath = resolve(
-      paths.types,
-      sourceRelativePath.replace(/\.voo$/, ".d.voo.ts"),
-    );
-    assertPathInside(declarationPath, paths.types);
-    expected.add(declarationPath);
-    rmSync(componentPath.replace(/\.voo$/, ".d.voo.ts"), { force: true });
-    writeIfChanged(
-      declarationPath,
-      generateVooDeclaration(component, framework),
-    );
-  }
-
-  for (const existing of readGeneratedDeclarations(paths.types, ".d.voo.ts")) {
-    if (!expected.has(existing)) rmSync(existing, { force: true });
-  }
-  removeEmptyDirectories(paths.types, paths.types);
-  return { typesRoot: paths.types, files: [...expected].sort() };
-}
-
 export function writeRustSchemaDeclarations({
   applicationRoot,
   contracts,
@@ -192,7 +132,7 @@ export function writeRustSchemaDeclarations({
   types,
   framework,
   workspaceRoot,
-}: WriteRustSchemaDeclarationsOptions): WrittenVooDeclarations {
+}: WriteRustSchemaDeclarationsOptions): WrittenRustDeclarations {
   const application = resolve(applicationRoot);
   const paths = resolveVooyaWorkspace(application, workspaceRoot);
   ensureVooyaWorkspace(paths);

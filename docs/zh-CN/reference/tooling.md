@@ -112,7 +112,7 @@ SvelteKit、SSR/hydration、Vite 8 或其他 bundler/browser 兼容声明。main
 
 `@vooya/rspack` 提供 `vooyaRsbuild()` 与 `vooyaRspack()`；证据下限是 Rspack
 `2.1.10`、Rsbuild `2.1.13`。`@vooya/webpack` 的实验范围为 Webpack `>=5`，
-fixture 覆盖 5.101.0 和 5.109.2。已发布 beta.0 仍是 legacy `.voo` 路径；
+fixture 覆盖 5.101.0 和 5.109.2。普通 Rust 接入需要可选的 0.2 alpha 包组合；
 `test:rust-bundlers` 为 Alpha 的 Vue/React Rust-file 路径提供具名打包消费证据。
 SSR、hydration、Module Federation 和 state-preserving HMR 不在当前承诺内。
 

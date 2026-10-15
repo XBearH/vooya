@@ -4,7 +4,6 @@ import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import test from "node:test";
-import { parseVooComponent } from "@vooya/compiler";
 
 import { buildApplication, discoverRustSourceFiles, findNearestCargoManifest, generateRustCrateRoot, generateRustSourceRoot, generatedCargoManifest, remapRustDiagnostic, resolveRustBuildOptions, resolveRustDependencyRoots, resolveRuntimeCrateRoot, resolveVooyaCrateRoot, rustModuleIdentifier, selectRustRootModules } from "../dist/index.js";
 
@@ -207,7 +206,7 @@ function readOutputTree(directory) {
       : readFileSync(resolve(directory, entry.name))]);
 }
 
-for (const failure of ["CSS transformation", "declaration generation", "runtime JavaScript read", "metadata write", "metadata installation"]) {
+for (const failure of ["schema extraction", "declaration generation", "runtime JavaScript read", "metadata write", "metadata installation"]) {
   test(`preserves all previous artifacts and metadata after ${failure} fails`, () => {
     const root = mkdtempSync(resolve(tmpdir(), "vooya-late-build-failure-"));
     const workspaceRoot = resolve(root, ".vooya");
@@ -245,17 +244,6 @@ for (const failure of ["CSS transformation", "declaration generation", "runtime 
       const oldOutput = readOutputTree(outputDir);
       const oldMetadata = readFileSync(metadataPath);
       const workspaceEntries = readdirSync(workspaceRoot).sort();
-      const component = parseVooComponent(`<component name="Counter">
-props:
-  initial: i32 = 0
-</component>
-<rust>
-fn counter() {}
-</rust>
-<style scoped>
-.counter { display: flex; }
-</style>`, resolve(root, "Counter.voo"));
-      if (failure === "CSS transformation") component.style.content = ".counter {";
       if (failure === "metadata write") {
         fs.writeFileSync = (path, data, ...args) => {
           if (String(path).startsWith(`${metadataPath}.staging-`)) {
@@ -280,15 +268,14 @@ fn counter() {}
       }
       syncBuiltinESMExports();
       const expectedError = {
-        "CSS transformation": /Unclosed block/,
-        "declaration generation": /Unknown Vooya framework/,
+        "schema extraction": /schema version|version 2|not a supported record/i,
+        "declaration generation": /Unknown schema declaration framework/,
         "runtime JavaScript read": /ENOENT.*vooya_app\.js/,
         "metadata write": /injected metadata write failure/,
         "metadata installation": /injected metadata installation failure/,
       }[failure];
       assert.throws(() => buildApplication({
         ...options,
-        components: [component],
         framework: failure === "declaration generation" ? "unsupported" : "vue",
         toolchain: { ...toolchain, cargo: { ...toolchain.cargo, version: "cargo candidate" } },
         exec(command, args) {
@@ -296,7 +283,9 @@ fn counter() {}
           if (failure !== "runtime JavaScript read") {
             writeFileSync(resolve(stagingOutput, "vooya_app.js"), "new loader");
           }
-          writeFileSync(resolve(stagingOutput, "vooya_app_bg.wasm"), Buffer.from("new wasm"));
+          const records = [{ version: failure === "schema extraction" ? 2 : 1, kind: "component",
+            id: "counter::Counter", name: "Counter", group: "src/Counter.rs", params: [] }];
+          writeFileSync(resolve(stagingOutput, "vooya_app_bg.wasm"), schemaWasm(records));
         },
       }), expectedError);
       assert.ok(stagingOutput, "failure must occur after binding generation");
@@ -357,13 +346,6 @@ shared = { workspace = true, features = ["browser"] }
   }
 });
 
-test("maps Cargo diagnostics using compiler source location metadata", () => {
-  const generated = resolve("/project/cache/src/components/0-Counter.rs");
-  const diagnostic = remapRustDiagnostic({ level: "error", message: "missing", rendered: `error\n --> ${generated}:4:9\n  |\n4 | missing\n`, spans: [{ file_name: generated, line_start: 4, column_start: 9 }] }, new Map([[generated, { id: "/project/src/Counter.rs", startLine: 10, generatedLineOffset: 1 }]]));
-  assert.match(diagnostic, /\/project\/src\/Counter\.rs:12:9/);
-  assert.match(diagnostic, /12 \| missing/);
-});
-
 test("maps diagnostics from copied multi-file modules back to authored files", () => {
   const generatedRoot = resolve("/project/.vooya/build");
   const generated = resolve(generatedRoot, "src/rust/src/MathPlot/series.rs");
@@ -373,7 +355,7 @@ test("maps diagnostics from copied multi-file modules back to authored files", (
     message: "missing method",
     rendered: "error\n --> src/rust/src/MathPlot/series.rs:2:15\n  |\n2 | missing\n",
     spans: [{ file_name: "src/rust/src/MathPlot/series.rs", line_start: 2, column_start: 15 }],
-  }, new Map([[generated, { id: authored, startLine: 1, generatedLineOffset: 0 }]]), generatedRoot);
+  }, new Map([[generated, { id: authored }]]), generatedRoot);
   assert.ok(diagnostic.includes(`${authored}:2:15`), diagnostic);
   assert.doesNotMatch(diagnostic, /src\/rust\/src\/MathPlot\/series\.rs:2:15/);
 });
@@ -457,3 +439,22 @@ for (const prefix of ["rust/.", "rust/unused/..", "rust\\."]) {
     assert.match(generateRustSourceRoot(["rust/Counter.rs"], publicFiles, prefix), /pub mod Counter;/);
   });
 }
+
+function schemaWasm(records) {
+  const encode = (value) => { const out = []; do { let byte = value & 127; value >>>= 7; if (value) byte |= 128; out.push(byte); } while (value); return out; };
+  const name = Buffer.from("__voo_schema");
+  const payload = Buffer.concat([Buffer.from(encode(name.length)), name, Buffer.from(records.map((record) => JSON.stringify(record)).join("\n") + "\n")]);
+  return Buffer.concat([Buffer.from([0, 97, 115, 109, 1, 0, 0, 0, 0]), Buffer.from(encode(payload.length)), payload]);
+}
+
+test("source discovery omits a custom generated workspace under the source root", () => {
+  const root = mkdtempSync(resolve(tmpdir(), "vooya-custom-workspace-discovery-"));
+  try {
+    const source = resolve(root, "Counter.rs");
+    const generated = resolve(root, ".artifact-build");
+    mkdirSync(resolve(generated, "src"), { recursive: true });
+    writeFileSync(source, "// authored Rust");
+    writeFileSync(resolve(generated, "src/CopiedCounter.rs"), "// generated Rust copy");
+    assert.deepEqual(discoverRustSourceFiles(root, ".", [generated]), [source]);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});

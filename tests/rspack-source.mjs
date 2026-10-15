@@ -34,16 +34,16 @@ function verify(name, packages, expectWasm) {
   if (expectWasm && !files.some((file) => file.endsWith(".wasm"))) throw new Error(`${name} did not emit a WASM asset.`);
   if (!files.some((file) => file.endsWith(".css"))) throw new Error(`${name} did not emit scoped CSS.`);
   const generatedTypes = resolve(project, ".vooya/types");
-  if (!existsSync(generatedTypes) || !walk(generatedTypes).some((file) => file.endsWith(".d.voo.ts"))) {
+  if (!existsSync(generatedTypes) || !walk(generatedTypes).some((file) => file.endsWith(".d.rs.ts"))) {
     throw new Error(`${name} did not generate declarations under .vooya/types.`);
   }
-  if (walk(resolve(project, "src")).some((file) => file.endsWith(".d.voo.ts"))) {
+  if (walk(resolve(project, "src")).some((file) => file.endsWith(".d.rs.ts"))) {
     throw new Error(`${name} wrote generated declarations beside source files.`);
   }
   if (!existsSync(resolve(project, ".vooya/metadata.json"))) {
     throw new Error(`${name} did not write Vooya workspace metadata.`);
   }
-  console.log(`Verified ${name} source .voo build with ${files.length} output files.`);
+  console.log(`Verified ${name} source .rs build with ${files.length} output files.`);
   return project;
 }
 
@@ -83,12 +83,12 @@ async function verifyDevRecovery(project) {
     await page.locator("[data-host-toggle]").click();
     await waitForText(page, "[data-count]", "4", "Rspack Vue dispose/remount failed.");
 
-    const componentPath = resolve(project, "src/Counter.voo");
+    const componentPath = resolve(project, "src/Counter.rs");
     const source = readFileSync(componentPath, "utf8");
     const buildsBeforeFailure = successfulBuildCount(output);
     writeFileSync(componentPath, source.replace("use crate::{EventListener, View, ViewElement};", "use crate::{EventListener, View, ViewElement};\nthis is invalid Rust"));
     await waitFor(() => output.includes("Cargo build failed with exit code 101"), 60_000, () => output);
-    if (!/Counter\.voo:\d+/.test(output)) throw new Error(`Rspack did not retain the mapped .voo Rust diagnostic.\n${output}`);
+    if (!/Counter\.rs:\d+/.test(output)) throw new Error(`Rspack did not retain the mapped .rs Rust diagnostic.\n${output}`);
     if (server.exitCode !== null) throw new Error("Rsbuild exited after a failed Rust rebuild.");
 
     writeFileSync(componentPath, source);
@@ -105,7 +105,7 @@ async function verifyDevRecovery(project) {
     await waitFor(
       () => successfulBuildCount(output) > buildsBeforeSourceEdit,
       60_000,
-      () => `Edited .voo source did not complete an Rsbuild compilation.\n${output}`,
+      () => `Edited .rs source did not complete an Rsbuild compilation.\n${output}`,
     );
     await waitFor(
       () => mainFrameNavigations > navigationsBeforeSourceEdit,
@@ -122,11 +122,11 @@ async function verifyDevRecovery(project) {
         buttonLabelsAfterManualReload = await page.locator("button").allTextContents();
       } catch (reloadError) {
         throw new Error(
-          `Rspack dev server stopped while checking the rebuilt .voo source: ${reloadError}.\n${output}`,
+          `Rspack dev server stopped while checking the rebuilt .rs source: ${reloadError}.\n${output}`,
         );
       }
       throw new Error(
-        `Rspack reloaded without the rebuilt .voo source. ` +
+        `Rspack reloaded without the rebuilt .rs source. ` +
         `Builds: ${successfulBuildCount(output)}, navigations: ${mainFrameNavigations}, ` +
         `buttons before manual reload: ${JSON.stringify(buttonLabelsBeforeManualReload)}, ` +
         `after: ${JSON.stringify(buttonLabelsAfterManualReload)}.\n${output}`,
@@ -134,7 +134,7 @@ async function verifyDevRecovery(project) {
     }
     const unexpectedErrors = errors.filter((message) => !message.includes("Cargo build failed with exit code 101"));
     if (unexpectedErrors.length) throw new Error(`Rspack Vue browser errors:\n${unexpectedErrors.join("\n")}`);
-    console.log("Verified Rsbuild .voo rebuild and Rust failure recovery without restarting the dev server.");
+    console.log("Verified Rsbuild .rs rebuild and Rust failure recovery without restarting the dev server.");
   } finally {
     await browser?.close();
     if (server && server.exitCode === null) server.kill("SIGTERM");

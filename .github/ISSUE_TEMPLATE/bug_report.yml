@@ -44,7 +44,7 @@ body:
     id: reproduction
     attributes:
       label: Minimal reproduction
-      description: Link a small repository or provide the smallest .voo component and configuration that reproduces the problem.
+      description: Link a small repository or provide the smallest Rust component and configuration that reproduces the problem.
     validations:
       required: true
   - type: textarea

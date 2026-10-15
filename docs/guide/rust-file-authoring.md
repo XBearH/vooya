@@ -1,7 +1,7 @@
 # Rust-file authoring
 
 Rust-file authoring is the beta path for components and stores. It uses
-ordinary `.rs` files; `.voo.rs` is not part of the contract.
+ordinary `.rs` files.
 
 ## Vooya attribute markers
 
@@ -90,13 +90,10 @@ The bundler generates `createCartStore()` and a `useCart()` entry with the same
 names and fields for the first-party adapters. Its `state` container remains
 framework-native; see the [Store concept](../concepts/store.md).
 
-The earlier `.voo` format combined a manifest, Rust, and CSS in one custom file.
-We moved away from it because it hid Rust from normal tooling, required a
-separate parser and formatter, and made the source contract diverge from the Rust
-compiler. Keeping ordinary `.rs` files makes rust-analyzer, Cargo diagnostics,
-schema derives, and generated bindings follow one source of truth. The old
-format remains only as transitional implementation history and is not a
-new-project authoring choice.
+Ordinary Rust files keep rust-analyzer, Cargo diagnostics, schema derives,
+and generated bindings on one source of truth. The former custom-format
+implementation and fixtures have been removed from this development line;
+see [migration](../project/retired-authoring.md).
 
 ## Roles
 

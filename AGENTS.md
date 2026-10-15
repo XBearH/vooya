@@ -11,7 +11,8 @@ host framework owns the application shell; Vooya connects compilation, typed
 bindings, component/store behavior, and lifecycle.
 
 - Current authoring uses ordinary Rust `.rs` files and explicit Vooya macros.
-  `.voo` is legacy fixture coverage, not the default path for new features.
+  The custom source format, its parser, formatter, and loaders are removed from
+  this development line. Keep examples and acceptance tests on the Rust path.
 - Rust is the implemented language provider. Keep implemented behavior,
   experimental integrations, and proposed providers distinct.
 - `@vooya/build-core` currently forwards to `@vooya/provider-rust`; do not
@@ -30,7 +31,7 @@ context; an RFC proposal is not evidence that a feature has shipped.
 | --- | --- |
 | Rust source discovery, workspace, builds, schemas, declarations | `packages/provider-rust/source/` |
 | Build compatibility entry | `packages/build-core/source/` |
-| Code generation, ABI and style helpers | `packages/compiler/source/` |
+| Shared ABI and scoped-style helpers | `packages/compiler/source/` |
 | Bundler entry points | `packages/vite/`, `packages/rspack/`, `packages/webpack/` |
 | Framework adapters | `packages/vue/`, `packages/react/`, `packages/solid/`, `packages/svelte/` |
 | Rust runtime and authoring macros | `crates/`, `packages/core/rust/` |

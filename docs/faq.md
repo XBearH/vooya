@@ -26,10 +26,10 @@ explicitly chooses to do so.
 
 ## What happened to `.voo`?
 
-`.voo` was an exploratory intermediate format while the island model was being
-validated. It is not the current authoring path. New components use ordinary
-Rust files, role attributes, and `rsx!`; remaining `.voo` references are
-historical or regression evidence.
+The custom format, parser, formatter, and loader branches have been removed from
+the current development line. Components and Stores use ordinary `.rs` files,
+role attributes, and referenced CSS. Historical releases are unchanged; see the
+[migration guide](./project/retired-authoring.md).
 
 ## Why did `vooya doctor` fail?
 
@@ -41,10 +41,10 @@ intend to use.
 
 ## Is Webpack or Rspack supported?
 
-Both have experimental first-party adapters with named fixtures. Their published beta evidence covers transitional `.voo` fixtures; `.rs`
-integration is unreleased 0.2 work. Vite remains the published Rust-file path. Check the [compatibility matrix](./project/compatibility.md)
-before choosing a bundler; do not infer support for unlisted versions,
-Turbopack, Rollup, SSR, or hydration.
+Both have implemented first-party Rust integrations in the opt-in 0.2 alpha.
+Vue/React production paths and Vue watch recovery have browser evidence.
+Other framework/watch combinations remain experimental. Vite remains the
+primary path; see the [compatibility matrix](./project/compatibility.md).
 
 ## Which framework adapters are available?
 

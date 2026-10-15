@@ -1,8 +1,7 @@
 // This package accesses Webpack structurally so it has no runtime dependency
 // on a specific Webpack 5 minor. The supported boundary is verified separately.
-import { createHash } from "node:crypto";
-import { readdirSync, readFileSync, mkdirSync, writeFileSync, statSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { readFileSync, mkdirSync, writeFileSync, statSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
@@ -11,22 +10,12 @@ import {
   rustInputFingerprint,
   resolveVooyaWorkspace,
   resolveToolchain,
-  writeVooDeclarations,
 } from "@vooya/build-core";
-import type { BuildApplicationResult, RustBuildOptions } from "@vooya/build-core";
-import { parseVooComponent } from "@vooya/compiler";
-import type { SourceComponent } from "@vooya/compiler";
+import type { RustBuildOptions } from "@vooya/build-core";
 
 import { deleteBuildState, getBuildState, setBuildState } from "./state.js";
 
 const loaderPath = fileURLToPath(new URL("./loader.js", import.meta.url));
-const ignoredDirectories = new Set([
-  ".git",
-  ".vooya",
-  "dist",
-  "node_modules",
-  "target",
-]);
 let nextInstance = 0;
 
 export interface VooyaWebpackOptions {
@@ -115,7 +104,7 @@ export class VooyaWebpackPlugin implements WebpackPluginLike {
 
   rule(): VooyaWebpackRule {
     return {
-      test: /\.(voo|rs)$/,
+      test: /\.rs$/,
       use: [
         {
           loader: loaderPath,
@@ -169,12 +158,10 @@ export class VooyaWebpackPlugin implements WebpackPluginLike {
 
   private build(compiler: WebpackCompilerLike): void {
     const applicationRoot = compiler.context;
-    const components = readVooComponents(applicationRoot);
     const workspace = resolveVooyaWorkspace(applicationRoot, this.workspaceRoot);
     const generation = String(++this.generation);
     const result = buildApplication({
       applicationRoot,
-      components,
       toolchain: resolveToolchain({ cwd: applicationRoot, ...this.toolchain }),
       rust: this.rust,
       workspaceRoot: workspace.root,
@@ -185,81 +172,20 @@ export class VooyaWebpackPlugin implements WebpackPluginLike {
     });
     const generationFile = resolve(workspace.cache, "webpack", `${this.instanceId}.generation`);
     writeIfChanged(generationFile, `${generation}\n`);
-    writeVooDeclarations({
-      applicationRoot,
-      components,
-      framework: this.framework,
-      workspaceRoot: workspace.root,
-    });
-    const rustModules = components.length === 0 ? prepareRustModules({
+
+    const rustModules = prepareRustModules({
       applicationRoot, workspaceRoot: workspace.root, schema: result.schema,
       framework: this.framework, runtimeModule: result.runtimeModule,
       runtimeHelpers: "@vooya/webpack/runtime", stylesRoot: resolve(workspace.cache, "webpack/rust-styles"),
-    }) : { modules: new Map<string, string>(), dependencies: [] };
+    });
     setBuildState(this.instanceId, {
       runtimeModule: result.runtimeModule,
       workspaceRoot: workspace.root,
       rustModules: rustModules.modules,
       generationFile,
-      styleModules: writeGeneratedStyles({
-        applicationRoot,
-        components,
-        result,
-        stylesRoot: resolve(workspace.cache, "webpack/styles"),
-      }),
-      watchedRoots: [...result.watchedFiles, ...components.map((component) => component.id), ...rustModules.dependencies],
+      watchedRoots: [...result.watchedFiles, ...rustModules.dependencies],
     });
   }
-}
-
-type PreparedSourceComponent = SourceComponent & { id: string };
-
-function readVooComponents(root: string): PreparedSourceComponent[] {
-  return readVooFiles(root)
-    .map((id) => {
-      const component = parseVooComponent(readFileSync(id, "utf8"), id);
-      component.id = id;
-      return component;
-    })
-    .filter((component): component is PreparedSourceComponent => component.format === "source");
-}
-
-function readVooFiles(directory: string): string[] {
-  const files: string[] = [];
-  for (const entry of readdirSync(directory, { withFileTypes: true })) {
-    if (ignoredDirectories.has(entry.name)) continue;
-    const path = join(directory, entry.name);
-    if (entry.isDirectory()) files.push(...readVooFiles(path));
-    else if (entry.isFile() && entry.name.endsWith(".voo")) files.push(path);
-  }
-  return files;
-}
-
-function writeGeneratedStyles({
-  applicationRoot,
-  components,
-  result,
-  stylesRoot,
-}: {
-  applicationRoot: string;
-  components: PreparedSourceComponent[];
-  result: BuildApplicationResult;
-  stylesRoot: string;
-}): Map<string, string> {
-  const styles = new Map<string, string>();
-  const css = new Map(result.css.map((style) => [style.componentId, style.code]));
-  for (const component of components) {
-    const style = css.get(component.id);
-    if (style === undefined) continue;
-    const identity = createHash("sha256")
-      .update(relative(applicationRoot, component.id))
-      .digest("hex")
-      .slice(0, 16);
-    const stylePath = resolve(stylesRoot, `${identity}-${component.name}.css`);
-    writeIfChanged(stylePath, style);
-    styles.set(component.id, stylePath);
-  }
-  return styles;
 }
 
 function writeIfChanged(path: string, content: string): void {

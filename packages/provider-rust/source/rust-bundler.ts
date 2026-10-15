@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
-import { compileVooStyle } from "@vooya/compiler";
+import { compileComponentStyle } from "@vooya/compiler";
 import { buildRustComponentContracts, indexVooyaSchema, type RustSchemaDocument } from "./schema.js";
 import { renderRustComponentModule, renderRustStoreModule } from "./rust-modules.js";
 import { resolveRustSchemaGroup, writeRustSchemaDeclarations } from "./workspace.js";
@@ -33,8 +33,8 @@ export function prepareRustModules(options: {
         dependencies.add(path);
         return readFileSync(path, "utf8");
       }).join("\n");
-      const code = compileVooStyle({
-        id, name: contract.component.name, props: [], events: [], rust: { content: "" },
+      const code = compileComponentStyle({
+        id, name: contract.component.name,
         style: { content, scoped: styles.some((style) => style.scoped) },
       });
       styleModule = resolve(stylesRoot, `${createHash("sha256").update(id).digest("hex").slice(0, 16)}.css`);
@@ -62,7 +62,7 @@ function writeStyleIfChanged(path: string, code: string): void {
 
 /** Directory watch events include generated children. Compare only authored inputs
  * so sourceRoot: "." does not rebuild Rust in response to its own artifacts.
- * Only Rust/legacy sources and Cargo manifests are scanned; linked styles are
+ * Only Rust sources and Cargo manifests are scanned; linked styles are
  * explicit file roots. JavaScript and asset contents are never read or hashed. */
 export function rustInputFingerprint(roots: string[], workspaceRoot: string, outputRoot?: string): string {
   const hash = createHash("sha256");
@@ -79,7 +79,7 @@ export function rustInputFingerprint(roots: string[], workspaceRoot: string, out
     if (stat.isDirectory()) {
       for (const entry of readdirSync(path, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
         if (["node_modules", ".git", "target"].includes(entry.name) || entry.isSymbolicLink()) continue;
-        if (entry.isDirectory() || /\.(rs|voo)$/.test(entry.name) || /^Cargo\.(toml|lock)$/.test(entry.name)) {
+        if (entry.isDirectory() || /\.rs$/.test(entry.name) || /^Cargo\.(toml|lock)$/.test(entry.name)) {
           visit(resolve(path, entry.name));
         }
       }

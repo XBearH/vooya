@@ -2,9 +2,9 @@
 
 Vooya is a WASM integration layer for existing Web applications. It compiles
 ordinary Rust component and store implementations into browser-consumable
-WebAssembly and exposes them through host-framework adapters. The old `.voo`
-format was an exploratory intermediate and is no longer a supported authoring
-path. Vue and React are the supported first-party adapters; Solid and Svelte
+WebAssembly and exposes them through host-framework adapters. Current
+development accepts ordinary Rust sources only; see the
+[format migration guide](project/retired-authoring.md). Vue and React are the supported first-party adapters; Solid and Svelte
 are experimental with current evidence on the Vite 7 Rust-file path.
 
 This directory is the source of truth for user-facing documentation and is
@@ -110,7 +110,7 @@ Performance work is recorded separately:
   `data-vooya-host`.
 - Rust role attributes and the `vooya` prefix describe the current authoring
   and runtime boundary.
-- **Voo** is the retired legacy component file format, using the `.voo`
-  extension. File-format tooling may still use the `voo` prefix.
+- **`voo`** remains a common Rust shorthand (`use vooya as voo`) and appears
+  in established ABI symbol names. It does not select a custom source format.
 
 The GitHub repository follows the same convention at `vooyajs/vooya`.

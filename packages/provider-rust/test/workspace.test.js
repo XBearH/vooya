@@ -18,18 +18,11 @@ import {
   resolveVooyaWorkspace,
   resolveRustSchemaGroup,
   writeRustSchemaDeclarations,
-  writeVooDeclarations,
 } from "../dist/workspace.js";
 
-function component(id, name = "Counter") {
-  return {
-    format: "source",
-    id,
-    name,
-    props: [],
-    events: [],
-    rust: { content: "pub struct Component;", startLine: 1 },
-  };
+function contract(id) {
+  return { component: { version: 1, kind: "component", id, name: "Counter", group: id, params: [] },
+    props: { version: 1, kind: "props", id: id + "::Props", name: "CounterProps", group: id, fields: [] } };
 }
 
 test("resolves the disposable .vooya workspace layout", () => {
@@ -48,29 +41,29 @@ test("resolves the disposable .vooya workspace layout", () => {
 test("writes mirrored declarations, removes stale output, and avoids source pollution", () => {
   const root = mkdtempSync(resolve(tmpdir(), "vooya-workspace-"));
   try {
-    const first = resolve(root, "src/one/Counter.voo");
-    const second = resolve(root, "src/two/Counter.voo");
+    const first = resolve(root, "src/one/Counter.rs");
+    const second = resolve(root, "src/two/Counter.rs");
     mkdirSync(resolve(first, "../"), { recursive: true });
     mkdirSync(resolve(second, "../"), { recursive: true });
     writeFileSync(first, "component");
     writeFileSync(second, "component");
-    writeFileSync(first.replace(/\.voo$/, ".d.voo.ts"), "legacy");
+    writeFileSync(first.replace(/\.rs$/, ".d.rs.ts"), "user-authored declaration");
 
-    const written = writeVooDeclarations({
+    const written = writeRustSchemaDeclarations({
       applicationRoot: root,
-      components: [component(first), component(second)],
+      contracts: [contract(first), contract(second)],
       framework: "vue",
     });
-    const firstDeclaration = resolve(root, ".vooya/types/src/one/Counter.d.voo.ts");
-    const secondDeclaration = resolve(root, ".vooya/types/src/two/Counter.d.voo.ts");
+    const firstDeclaration = resolve(root, ".vooya/types/src/one/Counter.d.rs.ts");
+    const secondDeclaration = resolve(root, ".vooya/types/src/two/Counter.d.rs.ts");
     assert.deepEqual(written.files, [firstDeclaration, secondDeclaration]);
-    assert.equal(existsSync(first.replace(/\.voo$/, ".d.voo.ts")), false);
+    assert.equal(readFileSync(first.replace(/\.rs$/, ".d.rs.ts"), "utf8"), "user-authored declaration");
     assert.match(readFileSync(firstDeclaration, "utf8"), /DefineComponent/);
     const modified = statSync(firstDeclaration).mtimeMs;
 
-    writeVooDeclarations({
+    writeRustSchemaDeclarations({
       applicationRoot: root,
-      components: [component(first)],
+      contracts: [contract(first)],
       framework: "vue",
     });
     assert.equal(statSync(firstDeclaration).mtimeMs, modified);

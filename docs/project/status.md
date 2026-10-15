@@ -139,8 +139,9 @@ See [the release guide](../maintainers/releases.md).
   production, rebuild, HMR, and error recovery. Rspack `>=2.1.10`
   has an experimental first-party adapter with Rsbuild, Rslib, and direct
   Rspack fixtures. Webpack `>=5` has an experimental first-party
-  adapter. Both published non-Vite adapters retain transitional `.voo` fixture
-  evidence; their `.rs` integration requires the opt-in 0.2 alpha packages. Webpack 4, Rollup,
+  adapter. Their `.rs` integration requires the opt-in 0.2 alpha packages; the older
+  non-Vite beta packages do not implement that path. Current development removes
+  the custom format and its tooling; see [migration](retired-authoring.md). Webpack 4, Rollup,
   Turbopack, and other bundlers remain unsupported.
 - The newer Vite+ four-framework dev/build matrix runs against current-source
   tarballs. It does not expand the published beta claim or cover every Vite+ tool.
