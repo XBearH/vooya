@@ -36,25 +36,26 @@ test("mirrors store snapshots and disposes with the Solid owner", async () => {
   assert.equal(disposed, 1);
 });
 
-test("disposes a store that resolves after its owner is gone", async () => {
+test("releases a late store once even if disposal throws", async () => {
   let resolveStore;
   let disposed = 0;
   let disposeOwner;
   const pending = new Promise((resolve) => { resolveStore = resolve; });
+  const errors = [];
 
   createRoot((dispose) => {
     disposeOwner = dispose;
-    useVooyaStore(() => pending, undefined);
+    useVooyaStore(() => pending, undefined, { onError: (cause) => errors.push(cause) });
   });
   disposeOwner();
   resolveStore({
     getSnapshot: () => ({}),
     subscribe: () => undefined,
-    dispose: () => { disposed += 1; },
+    dispose() { disposed++; throw new Error("late cleanup failed"); },
   });
-  await pending;
-  await Promise.resolve();
+  await new Promise((resolve) => setImmediate(resolve));
   assert.equal(disposed, 1);
+  assert.deepEqual(errors, []);
 });
 
 test("preserves a null snapshot before and after a Solid store action", async () => {
@@ -98,10 +99,68 @@ for (const asynchronous of [false, true]) {
           throw cause;
         }, undefined, { onError: (error) => errors.push(error) });
       });
-      await Promise.resolve();
+      await new Promise((resolve) => setImmediate(resolve));
       assert.deepEqual(errors, [cause]);
     } finally {
       disposeOwner?.();
     }
   });
 }
+
+test("releases failed attachments once and preserves the original error", async () => {
+  for (const stage of ["getSnapshot", "subscribe"]) {
+    const cause = new Error(stage);
+    const errors = [];
+    let disposed = 0;
+    let binding;
+    let disposeOwner;
+    createRoot((dispose) => {
+      disposeOwner = dispose;
+      binding = useVooyaStore(() => ({
+        getSnapshot: () => 1,
+        subscribe: () => () => {},
+        dispose() { disposed++; throw new Error("cleanup failed"); },
+        [stage]() { throw cause; },
+      }), undefined, { onError: (error) => errors.push(error) });
+    });
+    try {
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.deepEqual(errors, [cause]);
+      assert.equal(binding.store, undefined);
+      assert.equal(binding.state(), undefined);
+    } finally {
+      disposeOwner();
+    }
+    assert.equal(disposed, 1);
+  }
+});
+
+test("keeps the last snapshot after a notification error and recovers on the next notification", async () => {
+  const cause = new Error("snapshot failed");
+  const errors = [];
+  let value = 1;
+  let listener;
+  let binding;
+  let disposeOwner;
+  createRoot((dispose) => {
+    disposeOwner = dispose;
+    binding = useVooyaStore(() => ({
+      getSnapshot() { if (value === 2) throw cause; return value; },
+      subscribe(next) { listener = next; return () => { listener = undefined; }; },
+      dispose() {},
+    }), undefined, { onError: (error) => errors.push(error) });
+  });
+  try {
+    await Promise.resolve();
+    value = 2;
+    listener();
+    assert.deepEqual(errors, [cause]);
+    assert.equal(binding.state(), 1);
+    value = 3;
+    listener();
+    assert.equal(binding.state(), 3);
+  } finally {
+    disposeOwner();
+  }
+  assert.equal(listener, undefined);
+});

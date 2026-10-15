@@ -114,6 +114,13 @@ a successful value; typed action results are tracked in [Issue #152](https://git
 | `onError` | callback | — | Observe creation failures | Reports generated or custom factory creation failures; it does not receive Rust domain events |
 | `onNotify` | `(name: string, payload: unknown) => void` | — | Instrument a custom factory | Forwarded to custom factories, also in Solid and Svelte; not a typed generated Store event channel |
 
+Current development source also reports React Store subscription failures through
+the latest active `onError` callback and disposes the failed instance once.
+Cleanup failures during attachment do not replace the original initialization
+error. Late initialization after unmount disposes the instance without
+subscribing; late errors and factory callbacks are suppressed. This fix is
+unreleased and does not describe existing npm artifacts.
+
 ## `@vooya/solid`
 
 Solid uses the same generated component and `useName()` entry names. The
@@ -157,6 +164,16 @@ The current evidence is Svelte 5 + Vite 7 + Chromium. It covers Component
 mount and callback, Store action, Component prop update, generated declarations,
 and one cleanup call each for the Component handle and generated Store. It does
 not cover Svelte 3/4, SvelteKit, SSR, hydration, Vite 8, Rspack, or Webpack.
+
+In current development source, Vue, Solid, and Svelte report Store creation,
+initial snapshot, and subscription failures through `onError` and clear failed
+bindings. Owned instances are released once; Vue custom sources retain their
+`disposeOnUnmount` policy. A notification snapshot failure preserves the last
+good state and a later notification may recover. Cleanup attempts disposal even
+if unsubscribe throws. Cleanup failures during attachment preserve the original
+error; normal unmount cleanup errors use the framework lifecycle error handling.
+Late resolution disposes the instance without attaching it. These fixes are
+unreleased.
 
 ## `@vooya/rspack`
 

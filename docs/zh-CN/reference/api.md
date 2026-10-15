@@ -100,6 +100,11 @@ unsubscribe }`；`dispatch(name, ...args)` 调用声明的 store action。
 | `onError` | callback | — | 观察创建失败 | 接收生成或自定义 factory 的创建失败；不接收 Rust domain event |
 | `onNotify` | `(name: string, payload: unknown) => void` | — | custom factory instrumentation | 转发给 custom factory，Solid/Svelte 也提供；不是类型化 generated Store event channel |
 
+当前开发源码还会将 React Store 的订阅失败交给活跃宿主最新的 `onError`，并将失败实例
+清理一次。初始化失败时的清理异常不会覆盖原始错误。实例在卸载后才加载完成时，只做
+dispose，不再订阅；延迟错误和 factory 回调不再通知已失效的宿主。这项修复尚未发布，
+不描述现有 npm 产物的行为。
+
 ## `@vooya/solid`
 
 Solid 保持相同的 generated component 与 `useName()` 命名，但由 Solid owner、signal
@@ -139,6 +144,13 @@ unsubscribe/dispose 独立于 snapshot subscription；见 [Issue #153](https://g
 action、Component prop update、generated declarations，以及 Component handle 与
 generated Store 各一次 cleanup。没有覆盖 Svelte 3/4、SvelteKit、SSR、hydration、
 Vite 8、Rspack 或 Webpack。
+
+当前开发源码中，Vue、Solid、Svelte 的 Store 创建、首次 snapshot 读取和订阅失败
+统一交给 `onError`，并清空失败的绑定。拥有的实例只释放一次；Vue 自定义来源仍遵守
+`disposeOnUnmount`。通知时读取 snapshot 失败会保留最后一次成功的状态，后续通知
+仍可恢复。即使 unsubscribe 抛错也会尝试 dispose；初始化失败时的清理错误不会
+覆盖原始错误，正常卸载的清理错误交由框架生命周期处理。卸载后才创建完成的实例
+直接释放、不再订阅。这些修复尚未发布。
 
 ## `@vooya/rspack`
 

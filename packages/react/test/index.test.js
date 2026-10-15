@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createElement } from "react";
+import { createElement, StrictMode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { JSDOM } from "jsdom";
@@ -387,3 +387,109 @@ for (const asynchronous of [false, true]) {
     }
   });
 }
+
+for (const cleanupThrows of [false, true]) {
+  test(`reports subscription failure once and releases the Store${cleanupThrows ? " even when disposal throws" : ""}`, async () => {
+    const cause = new Error("subscribe failed");
+    const errors = [], staleErrors = [];
+    let resolveStore, current, disposed = 0;
+    const factory = () => new Promise((resolve) => { resolveStore = resolve; });
+    function Consumer({ onError }) {
+      current = useVooyaStore(factory, undefined, { onError });
+      return createElement("span", null, current.state ?? "pending");
+    }
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    try {
+      await act(async () => root.render(createElement(Consumer, { onError: (error) => staleErrors.push(error) })));
+      await act(async () => root.render(createElement(Consumer, { onError: (error) => errors.push(error) })));
+      await act(async () => resolveStore({
+        getSnapshot: () => 1,
+        subscribe() { throw cause; },
+        dispose() { disposed++; if (cleanupThrows) throw new Error("cleanup failed"); },
+      }));
+      await new Promise(setImmediate);
+      assert.deepEqual(errors, [cause]);
+      assert.deepEqual(staleErrors, []);
+      assert.equal(disposed, 1);
+      // A render after the failure must not expose the rejected Store instance.
+      await act(async () => root.render(createElement(Consumer, { onError: (error) => errors.push(error) })));
+      assert.equal(current.store, undefined);
+      assert.equal(current.state, undefined);
+      assert.equal(container.textContent, "pending");
+    } finally {
+      await act(async () => root.unmount());
+    }
+    assert.equal(disposed, 1);
+    assert.deepEqual(errors, [cause]);
+  });
+}
+
+test("suppresses late Store disposal errors and factory callbacks after unmount", async () => {
+  const errors = [], notifications = [];
+  let resolveStore, factoryOptions, disposed = 0;
+  const factory = (_props, options) => {
+    factoryOptions = options;
+    return new Promise((resolve) => { resolveStore = resolve; });
+  };
+  function Consumer() {
+    useVooyaStore(factory, undefined, {
+      onError: (error) => errors.push(error),
+      onNotify: (...args) => notifications.push(args),
+    });
+    return null;
+  }
+  const root = createRoot(document.createElement("div"));
+  await act(async () => root.render(createElement(Consumer)));
+  await act(async () => root.unmount());
+  await act(async () => {
+    factoryOptions.onError(new Error("late callback"));
+    factoryOptions.onNotify("late", 1);
+    resolveStore({
+      getSnapshot: () => 0,
+      subscribe() { assert.fail("inactive Store must not subscribe"); },
+      dispose() { disposed++; throw new Error("late disposal failed"); },
+    });
+  });
+  await new Promise(setImmediate);
+  assert.equal(disposed, 1);
+  assert.deepEqual(errors, []);
+  assert.deepEqual(notifications, []);
+});
+
+test("StrictMode late Store completion does not clear the active Store", async () => {
+  const pending = [], disposed = [], errors = [];
+  const factory = () => new Promise((resolve) => pending.push(resolve));
+  let current, notify;
+  let snapshot = 1;
+  function Consumer() {
+    current = useVooyaStore(factory, undefined, { onError: (error) => errors.push(error) });
+    return createElement("span", null, current.state ?? "pending");
+  }
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  try {
+    await act(async () => root.render(createElement(StrictMode, null, createElement(Consumer))));
+    assert.equal(pending.length, 2);
+    await act(async () => pending[1]({
+      getSnapshot: () => snapshot,
+      subscribe(listener) { notify = listener; return () => { notify = undefined; }; },
+      dispose() { disposed.push("active"); },
+    }));
+    assert.equal(container.textContent, "1");
+    await act(async () => pending[0]({
+      getSnapshot: () => 0,
+      subscribe() { assert.fail("inactive Store must not subscribe"); },
+      dispose() { disposed.push("late"); throw new Error("late disposal failed"); },
+    }));
+    await new Promise(setImmediate);
+    await act(async () => { snapshot = 2; notify(); });
+    assert.equal(container.textContent, "2");
+    assert.ok(current.store);
+    assert.deepEqual(errors, []);
+  } finally {
+    await act(async () => root.unmount());
+  }
+  assert.deepEqual(disposed, ["late", "active"]);
+  assert.equal(notify, undefined);
+});

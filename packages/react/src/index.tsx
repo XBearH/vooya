@@ -238,7 +238,6 @@ export function useVooyaStore<
 ) {
   const storeRef = useRef<TStore | undefined>(undefined);
   const listenersRef = useRef(new Set<() => void>());
-  const unsubscribeRef = useRef<(() => void) | undefined>(undefined);
   const initialPropsRef = useRef(props);
   const optionsRef = useRef(options);
   optionsRef.current = options;
@@ -259,40 +258,54 @@ export function useVooyaStore<
   useEffect(() => {
     let active = true;
     let createdStore: TStore | undefined;
-    Promise.resolve().then(() => factory(initialPropsRef.current, {
+    let unsubscribe: (() => void) | undefined;
+    const releaseStore = () => {
+      const store = createdStore;
+      createdStore = undefined;
+      if (storeRef.current === store) storeRef.current = undefined;
+      const stop = unsubscribe;
+      unsubscribe = undefined;
+      try {
+        stop?.();
+      } finally {
+        store?.dispose();
+      }
+    };
+    void Promise.resolve().then(() => factory(initialPropsRef.current, {
       onError(cause) {
-        optionsRef.current.onError?.(cause);
-      },
-      onNotify(name, payload) {
-        optionsRef.current.onNotify?.(name, payload);
-      },
-    })).then(
-      (store) => {
-        createdStore = store;
-        if (!active) {
-          store.dispose();
-          return;
-        }
-        storeRef.current = store;
-        const unsubscribe = store.subscribe(() => {
-          for (const listener of listenersRef.current) listener();
-        });
-        unsubscribeRef.current = typeof unsubscribe === "function" ? unsubscribe : undefined;
-        for (const listener of listenersRef.current) listener();
-      },
-      (cause) => {
         if (active) optionsRef.current.onError?.(cause);
       },
-    );
+      onNotify(name, payload) {
+        if (active) optionsRef.current.onNotify?.(name, payload);
+      },
+    })).then((store) => {
+      createdStore = store;
+      if (!active) {
+        releaseStore();
+        return;
+      }
+      storeRef.current = store;
+      const stop = store.subscribe(() => {
+        if (!active) return;
+        for (const listener of listenersRef.current) listener();
+      });
+      unsubscribe = typeof stop === "function" ? stop : undefined;
+      for (const listener of listenersRef.current) listener();
+    }).catch((cause) => {
+      // Attachment failure owns cleanup. Clear references before user cleanup
+      // runs so an exception cannot leave a Store to be disposed twice.
+      try { releaseStore(); } catch { /* Preserve the initialization failure. */ }
+      // Late completion has no live owner to notify, including disposal errors.
+      if (active) optionsRef.current.onError?.(cause);
+    });
 
     return () => {
       active = false;
-      unsubscribeRef.current?.();
-      unsubscribeRef.current = undefined;
-      const store = storeRef.current ?? createdStore;
-      storeRef.current = undefined;
-      store?.dispose();
-      for (const listener of listenersRef.current) listener();
+      try {
+        releaseStore();
+      } finally {
+        for (const listener of listenersRef.current) listener();
+      }
     };
   }, [factory]);
 
