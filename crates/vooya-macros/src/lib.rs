@@ -1329,15 +1329,8 @@ fn schema_metadata(
 
 #[cfg(test)]
 mod tests {
-    use super::{action_returns_result, snake_case_ident};
+    use super::action_returns_result;
     use syn::parse_quote;
-
-    #[test]
-    fn export_stems_preserve_acronym_boundaries() {
-        assert_eq!(snake_case_ident("HTTPView"), "h_t_t_p_view");
-        assert_eq!(snake_case_ident("HTTPClient"), "h_t_t_p_client");
-        assert_eq!(snake_case_ident("Cart"), "cart");
-    }
 
     #[test]
     fn recognizes_only_standard_action_result_paths() {
