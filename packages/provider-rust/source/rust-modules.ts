@@ -145,7 +145,9 @@ export const metadata = ${JSON.stringify({ name, actions: store.actions, snapsho
 
 
 function rustStem(name: string): string {
-  return name.replace(/([a-z0-9])([A-Z])/g, "$1_$2").replace(/[^A-Za-z0-9_]/g, "_").toLowerCase();
+  // Match snake_case_ident in vooya-macros, including consecutive capitals.
+  return name.replace(/[A-Z]/g, (character, index) => `${index > 0 ? "_" : ""}${character.toLowerCase()}`)
+    .replace(/[^a-z0-9_]/gu, "_") || "store";
 }
 
 function rustProperty(name: string): string {

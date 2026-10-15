@@ -66,7 +66,10 @@ export function buildPrecompiledVueArtifact({
     throw new Error(`Vooya Vue artifacts require exactly one Rust component in ${sourcePath}.`);
   }
   const contract = contracts[0];
-  const stem = contract.component.name.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase();
+  // Match snake_case_ident in vooya-macros, including consecutive capitals.
+  const stem = contract.component.name
+    .replace(/[A-Z]/g, (character, index) => `${index > 0 ? "_" : ""}${character.toLowerCase()}`)
+    .replace(/[^a-z0-9_]/gu, "_") || "store";
   const manifest = {
     formatVersion: 1 as const,
     artifactVersion: metadata.version,

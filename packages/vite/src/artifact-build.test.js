@@ -11,9 +11,10 @@ const repositoryRoot = resolve(import.meta.dirname, "../../..");
 const counterSource = resolve(repositoryRoot, "tests/fixtures/precompiled-vue/artifact/component/PortableCounter.rs");
 const vueVersion = JSON.parse(readFileSync(resolve(repositoryRoot, "packages/vue/package.json"), "utf8")).version;
 
-test("builds a Vue artifact with retryable WASM loading from an explicitly named non-prefix package", async () => {
+test("builds a Vue artifact with acronym exports and retryable WASM loading from a non-prefix package", async () => {
   const fixture = createArtifactFixture();
   try {
+    writeFileSync(fixture.source, readFileSync(fixture.source, "utf8").replace("pub fn PortableCounter(", "pub fn HTTPView("));
     const staleFiles = ["component.css", "previous-entry.js", "previous-source.rs"];
     mkdirSync(resolve(fixture.root, "dist"));
     for (const file of staleFiles) writeFileSync(resolve(fixture.root, "dist", file), "stale");
@@ -25,18 +26,23 @@ test("builds a Vue artifact with retryable WASM loading from an explicitly named
       formatVersion: 1,
       artifactVersion: vueVersion,
       framework: "vue",
-      component: "PortableCounter",
+      component: "HTTPView",
       abiVersion: 1,
       bindings: {
-        mount: "voo_portable_counter_mount",
-        dispose: "voo_portable_counter_dispose",
-        updates: { props: "voo_portable_counter_update_props" },
+        mount: "voo_h_t_t_p_view_mount",
+        dispose: "voo_h_t_t_p_view_dispose",
+        updates: { props: "voo_h_t_t_p_view_update_props" },
       },
       wasm: "./wasm/vooya_app_bg.wasm",
       types: "./index.d.ts",
     });
     for (const file of ["manifest.json", "index.js", "index.d.ts", "wasm/vooya_app.js", "wasm/vooya_app_bg.wasm"]) {
       assert.ok(readFileSync(resolve(fixture.root, "dist", file)));
+    }
+    const wasm = new WebAssembly.Module(readFileSync(resolve(fixture.root, "dist/wasm/vooya_app_bg.wasm")));
+    const exports = new Set(WebAssembly.Module.exports(wasm).map(({ name }) => name));
+    for (const name of [manifest.bindings.mount, manifest.bindings.dispose, ...Object.values(manifest.bindings.updates)]) {
+      assert.ok(exports.has(name), `Manifest binding ${name} must exist in the compiled WASM`);
     }
     assert.match(readFileSync(resolve(fixture.root, "dist/index.js"), "utf8"), /from "@vooya\/vue"/);
     assert.match(readFileSync(resolve(fixture.root, "dist/index.d.ts"), "utf8"), /VooyaArtifactManifest/);
