@@ -290,6 +290,10 @@ export function useVooyaStore<
         for (const listener of listenersRef.current) listener();
       });
       unsubscribe = typeof stop === "function" ? stop : undefined;
+      if (!active) {
+        releaseStore();
+        return;
+      }
       for (const listener of listenersRef.current) listener();
     }).catch((cause) => {
       // Attachment failure owns cleanup. Clear references before user cleanup

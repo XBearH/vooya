@@ -493,3 +493,27 @@ test("StrictMode late Store completion does not clear the active Store", async (
   assert.deepEqual(disposed, ["late", "active"]);
   assert.equal(notify, undefined);
 });
+
+test("releases a subscription returned after synchronous owner unmount", async () => {
+  let listener;
+  let stopped = 0;
+  let disposed = 0;
+  const root = createRoot(document.createElement("div"));
+  const factory = () => ({
+    getSnapshot: () => 1,
+    subscribe(next) {
+      listener = next;
+      root.unmount();
+      return () => { listener = undefined; stopped++; };
+    },
+    dispose() { disposed++; },
+  });
+  function Consumer() {
+    useVooyaStore(factory, undefined);
+    return null;
+  }
+  await act(async () => root.render(createElement(Consumer)));
+  assert.equal(disposed, 1);
+  assert.equal(stopped, 1);
+  assert.equal(listener, undefined);
+});
