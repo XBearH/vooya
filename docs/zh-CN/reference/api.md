@@ -79,7 +79,7 @@ Vue 可直接接收生成 factory 的 Promise；React、Solid 和 Svelte 接收 
 | `useVooyaStore` | `(store \| PromiseLike<store>, options?)` | — | 自定义集成或共享实例的生命周期管理 | Vue `>=3.5.2 <4`；不是普通用户的主入口 |
 | `source` | `VooyaStore \| PromiseLike<VooyaStore>` | 必填 | 传入 instance 或 generated async store | 组件先 unmount 时会 dispose late instance |
 | `disposeOnUnmount` | `boolean` | `false` | 让当前组件拥有 disposal | instance-scoped store 通常设为 `true` |
-| `onError` | `(cause: unknown) => void` | — | 接收异步创建失败 | 不负责 retry 或隐藏 action error |
+| `onError` | `(cause: unknown) => void` | — | 接收创建、绑定和通知时的快照读取失败 | 不负责 retry 或隐藏 action error |
 
 `useVooyaStore` 是适配器层 API，不是普通用户的跨框架 Store 入口，也不是 Vapor 专属
 API。它适合共享实例、自定义集成和 adapter 作者。返回 `{ snapshot, dispatch,
@@ -97,7 +97,7 @@ unsubscribe }`；`dispatch(name, ...args)` 调用声明的 store action。
 | Generated component | React component props | — | 导入 `#[voo::component]` `.rs` | React `>=19`；`import Counter from "./Counter.rs"` |
 | Generated hook | `useName(options?)` | — | 消费 `#[voo::store]` `.rs` | `useSyncExternalStore`；每个 hook 生命周期一个 instance |
 | `useVooyaStore` | `(factory, props, options?)` | — | 自定义 adapter 或共享实例集成 | 高级 API；factory 可同步或 Promise |
-| `onError` | callback | — | 观察创建失败 | 接收生成或自定义 factory 的创建失败；不接收 Rust domain event |
+| `onError` | callback | — | 观察创建和订阅失败 | 不接收 Rust domain event |
 | `onNotify` | `(name: string, payload: unknown) => void` | — | custom factory instrumentation | 转发给 custom factory，Solid/Svelte 也提供；不是类型化 generated Store event channel |
 
 当前开发源码还会将 React Store 的订阅失败交给活跃宿主最新的 `onError`，并将失败实例
@@ -115,7 +115,7 @@ Solid 保持相同的 generated component 与 `useName()` 命名，但由 Solid 
 | Generated component | Solid component props | — | 导入 `#[voo::component]` `.rs` | Solid `>=1.9 <2`；事件使用 `onEventName` callback prop |
 | Generated primitive | `useName(options?)` | — | 消费 `#[voo::store]` `.rs` | `const { state, add } = useCart(); state()?.count` |
 | `useVooyaStore` | `(factory, props, options?)` | — | 自定义 adapter 或共享实例 | 高级 API；factory 可同步或 Promise |
-| `onError` | `(cause: unknown) => void` | — | 观察异步 factory 失败 | 释放绑定到当前 Solid owner |
+| `onError` | `(cause: unknown) => void` | — | 观察 Store 创建、绑定和通知时的快照读取失败 | 释放绑定到当前 Solid owner |
 | `onNotify` | 转发给 custom factory 的 callback 字段 | — | 高级 factory instrumentation | generated Solid Store 通过 subscription 发布 state，不提供独立 notification bus |
 
 统一 API 不等于强制统一响应式容器：Vue 返回 `Ref`，React 返回 snapshot，Solid 返回
@@ -133,7 +133,7 @@ lifecycle 包装 framework-neutral bridge。Store `state` 是
 | Generated component | Svelte component props | — | 导入 `#[voo::component]` `.rs` | Svelte `>=5 <6`；事件使用 `onEventName` callback prop |
 | Generated Store entry | `useName(options?)` | — | 消费 `#[voo::store]` `.rs` | `const { state, add } = useCart()`；模板读取 `$state?.count` |
 | `useVooyaStore` | `(factory, props, options?)` | — | 自定义 adapter 或共享实例 | 高级 API；factory 可同步或 Promise |
-| `onError` | `(cause: unknown) => void` | — | 观察异步 factory 失败 | Component 与 generated Store cleanup 绑定 Svelte destruction |
+| `onError` | `(cause: unknown) => void` | — | 观察 Store 创建、绑定和通知时的快照读取失败 | Component 与 generated Store cleanup 绑定 Svelte destruction |
 | `onNotify` | 转发给 custom factory 的 callback 字段 | — | 高级 factory instrumentation | generated Svelte Store 通过 `Readable` 发布，不承诺独立 notification bus |
 
 所有 first-party adapter 当前都没有 generated Store 的 domain notification。后续 ABI

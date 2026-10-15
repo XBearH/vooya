@@ -164,3 +164,22 @@ test("keeps the last snapshot after a notification error and recovers on the nex
   }
   assert.equal(listener, undefined);
 });
+
+test("still disposes the Store when unsubscribe throws during owner cleanup", async () => {
+  const cause = new Error("unsubscribe failed");
+  let disposed = 0;
+  let binding;
+  let disposeOwner;
+  createRoot((dispose) => {
+    disposeOwner = dispose;
+    binding = useVooyaStore(() => ({
+      getSnapshot: () => 1,
+      subscribe: () => () => { throw cause; },
+      dispose() { disposed++; },
+    }), undefined);
+  });
+  await Promise.resolve();
+  assert.throws(disposeOwner, (error) => error === cause);
+  assert.equal(binding.store, undefined);
+  assert.equal(disposed, 1);
+});
