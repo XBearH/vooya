@@ -3,7 +3,7 @@ import test from "node:test";
 import { renderRustComponentModule, renderRustStoreModule } from "../dist/rust-modules.js";
 
 for (const kind of ["component", "store"]) {
-  test(`generated Rust ${kind} retries failed WASM loading while sharing pending and successful bindings`, async () => {
+  test(`generated Rust ${kind} with an acronym name resolves exports and retries failed WASM loading`, async () => {
     const runtimeUrl = moduleUrl(`
       // Independent initialization state for the ${kind} module.
       export const state = { loads: 0, created: 0 };
@@ -15,14 +15,14 @@ for (const kind of ["component", "store"]) {
       export function resolveInitialization() { complete(); }
       export function rejectInitialization(error) { fail(error); }
       export function voo_abi_version() { return 1; }
-      export function voo_counter_mount() { return ++state.created; }
-      export function voo_counter_update_props() {}
-      export function voo_counter_dispose() {}
-      export function voo_cart_store_create() { return ++state.created; }
-      export function voo_cart_store_snapshot(handle) { return handle; }
-      export function voo_cart_store_subscribe() { return 1; }
-      export function voo_cart_store_unsubscribe() {}
-      export function voo_cart_store_dispose() {}
+      export function voo_h_t_t_p_view_mount() { return ++state.created; }
+      export function voo_h_t_t_p_view_update_props() {}
+      export function voo_h_t_t_p_view_dispose() {}
+      export function voo_h_t_t_p_client_store_create() { return ++state.created; }
+      export function voo_h_t_t_p_client_store_snapshot(handle) { return handle; }
+      export function voo_h_t_t_p_client_store_subscribe() { return 1; }
+      export function voo_h_t_t_p_client_store_unsubscribe() {}
+      export function voo_h_t_t_p_client_store_dispose() {}
     `);
     const helpersUrl = moduleUrl(`
       export function initializeWasm(init) { return init(); }
@@ -36,11 +36,11 @@ for (const kind of ["component", "store"]) {
     `);
     const options = { runtimeModule: runtimeUrl, runtimeHelpers: helpersUrl };
     const source = kind === "component"
-      ? renderRustComponentModule({ component: { name: "Counter", id: "Counter", params: [] } }, "vue", "Counter.rs", options)
-      : renderRustStoreModule({ name: "Cart", actions: [], snapshot: "u32" }, "vue", options);
+      ? renderRustComponentModule({ component: { name: "HTTPView", id: "HTTPView", params: [] } }, "vue", "HTTPView.rs", options)
+      : renderRustStoreModule({ name: "HTTPClient", actions: [], snapshot: "u32" }, "vue", options);
     const generated = await import(moduleUrl(source.replace('"@vooya/vue"', JSON.stringify(adapterUrl))));
     const runtime = await import(runtimeUrl);
-    const load = kind === "component" ? generated.default.loadBindings : generated.createCartStore;
+    const load = kind === "component" ? generated.default.loadBindings : generated.createHTTPClientStore;
 
     const failed = Promise.allSettled([load(), load()]);
     assert.equal(runtime.state.loads, 1, "concurrent consumers share one pending load");
