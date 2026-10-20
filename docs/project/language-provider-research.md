@@ -63,6 +63,35 @@ The manifest is an internal proposal until an RFC assigns its wire format and
 compatibility policy. It must support precompiled artifacts as well as source
 providers; a precompiled consumer must not require Cargo or a source provider.
 
+## Current Research Sequence
+
+The Rust provider extraction establishes an internal package seam, not a public
+provider protocol or support for another source language. The next work is split
+under [cross-language composition research](https://github.com/vooyajs/vooya/issues/168)
+so each boundary can be reviewed and tested independently:
+
+1. [#175](https://github.com/vooyajs/vooya/issues/175) defines the smallest
+   shared interface model, including JS-facing versus portable capabilities,
+   representable values, resources, diagnostics, and the source of truth for
+   generated contracts. It must be agreed before another provider advertises a
+   portable interface.
+2. [#176](https://github.com/vooyajs/vooya/issues/176) tests an internal
+   asynchronous provider-owned loader and multi-asset collection. It coordinates
+   with the artifact proposal in [#110](https://github.com/vooyajs/vooya/pull/110)
+   rather than establishing a competing public manifest. The prototype must
+   preserve current Rust entry points and distinguish component lifetime from a
+   shared runtime lifetime.
+3. [#177](https://github.com/vooyajs/vooya/issues/177) uses one standard-Go
+   Store only after those type and loading boundaries are agreed. It is evidence
+   about the proposed contract, not Go support, recursive UI composition, or a
+   managed Go toolchain.
+
+Completing any one task does not complete this research. A public provider
+option still requires at least two implementations passing the same conformance
+cases, an accepted artifact/lifecycle compatibility policy, and named consumer
+evidence. Keep AssemblyScript and Emscripten canaries as alternative tests of
+the same seam rather than requirements that must all ship together.
+
 ## Rust Reference Provider
 
 Rust is the first extraction target. The refactor must preserve existing public
@@ -134,9 +163,12 @@ actually compiles. Compare TinyGo only after this baseline; its
 support script. Go and TinyGo should not be treated as interchangeable compiler
 switches without separate lifecycle and library-compatibility evidence.
 
-This is a proposed experiment, not implemented Go support. Keep the existing
-AssemblyScript and Emscripten canaries as alternative tests of the same seam;
-there is no requirement to implement all three before learning from one.
+This is a proposed experiment, not implemented Go support. It is tracked as
+[#177](https://github.com/vooyajs/vooya/issues/177) and depends on the type
+model in [#175](https://github.com/vooyajs/vooya/issues/175) and the loader
+prototype in [#176](https://github.com/vooyajs/vooya/issues/176). Keep the
+existing AssemblyScript and Emscripten canaries as alternative tests of the same
+seam; there is no requirement to implement all three before learning from one.
 
 ## Preset Package Boundary
 
