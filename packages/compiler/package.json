@@ -35,6 +35,6 @@
   },
   "dependencies": {
     "postcss": "^8.5.23",
-    "postcss-selector-parser": "^7.1.5"
+    "postcss-selector-parser": "^7.1.6"
   }
 }
