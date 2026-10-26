@@ -3,6 +3,12 @@
 Historical entries were reconstructed from published package metadata and release
 snapshots; see [release history evidence](../../docs/maintainers/release-history.md).
 
+## 0.2.0-alpha.0
+
+### Patch Changes
+
+- 0f7de7d: Report Store snapshot and subscription failures through `onError`, clear failed bindings, and release owned instances once. Preserve the last good state after a notification snapshot failure so later notifications can recover.
+
 ## 0.1.0-beta.2
 
 ### Patch Changes

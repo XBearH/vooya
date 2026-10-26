@@ -1,6 +1,6 @@
 {
   "name": "@vooya/provider-rust",
-  "version": "0.2.0-alpha.0",
+  "version": "0.2.0-alpha.1",
   "description": "Rust source, Cargo, wasm-bindgen, schema and toolchain support for Vooya.",
   "type": "module",
   "license": "MIT OR Apache-2.0",
@@ -30,8 +30,8 @@
     "test": "npm run build && node --test test/*.test.js"
   },
   "dependencies": {
-    "@vooya/compiler": "0.1.0-beta.0",
-    "@vooya/core": "0.1.0-beta.0",
+    "@vooya/compiler": "0.2.0-alpha.0",
+    "@vooya/core": "0.2.0-alpha.0",
     "smol-toml": "1.9.1"
   }
 }

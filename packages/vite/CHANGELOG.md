@@ -5,6 +5,42 @@ snapshots; see [release history evidence](../../docs/maintainers/release-history
 
 Versions before alpha.9 were published as `@vooya/vite-plugin`, not `@vooya/vite`.
 
+## 0.2.0-alpha.1
+
+### Minor Changes
+
+- d544b31: Remove the experimental `buildPrecompiledVueArtifact` and
+  `validatePrecompiledVueArtifactOutput` exports from `@vooya/vite/build`.
+  Component authors can organize their JavaScript/WASM entry points, assets,
+  declarations and npm metadata themselves without a Vooya-specific package format.
+  The general build exports, Rust source authoring, framework adapters and managed
+  toolchain preset remain available.
+- ffdb8ce: Retire the custom component source format from the current development line.
+  Compile ordinary Rust Components and Stores through schema-driven bindings in
+  Vite, Webpack, and Rspack. Remove the old parser, formatter, loader branches,
+  declaration exports, and `buildApplication({ components })` input. Migrate
+  examples and acceptance fixtures to Rust and referenced CSS. Schema-generated
+  React declarations retain the host `className` prop. Existing
+  applications using removed inputs or APIs must follow the migration guide;
+  historical releases retain their original behavior.
+
+### Patch Changes
+
+- 7fe6eb1: Resolve Rust imports through Vite so project-root paths and aliases work. Update
+  Rust component styles during development and allow failed WASM loads to retry
+  when components are mounted again.
+  
+  Propagate Store action errors when the Rust return type uses `std::result::Result`
+  or `core::result::Result`, just as for the short `Result` spelling.
+- Updated dependencies [040fef3]
+- Updated dependencies [ffdb8ce]
+- Updated dependencies [7fe6eb1]
+- Updated dependencies [c318524]
+- Updated dependencies [7bc0a50]
+  - @vooya/compiler@0.2.0-alpha.0
+  - @vooya/build-core@0.2.0-alpha.1
+  - @vooya/core@0.2.0-alpha.0
+
 ## 0.2.0-alpha.0
 
 ### Minor Changes
