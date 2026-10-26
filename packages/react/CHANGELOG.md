@@ -3,6 +3,15 @@
 Historical entries were reconstructed from published package metadata and release
 snapshots; see [release history evidence](../../docs/maintainers/release-history.md).
 
+## 0.2.0-alpha.1
+
+### Patch Changes
+
+- 0f7de7d: Report Store subscription failures through the current onError callback and
+  release failed instances once. Catch late initialization/disposal failures
+  after unmount without invoking inactive owner callbacks, and keep StrictMode
+  instances isolated.
+
 ## 0.2.0-alpha.0
 
 ### Minor Changes

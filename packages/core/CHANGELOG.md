@@ -3,6 +3,20 @@
 Historical entries were reconstructed from published package metadata and release
 snapshots; see [release history evidence](../../docs/maintainers/release-history.md).
 
+## 0.2.0-alpha.0
+
+### Patch Changes
+
+- 7fe6eb1: Resolve Rust imports through Vite so project-root paths and aliases work. Update
+  Rust component styles during development and allow failed WASM loads to retry
+  when components are mounted again.
+  
+  Propagate Store action errors when the Rust return type uses `std::result::Result`
+  or `core::result::Result`, just as for the short `Result` spelling.
+- c318524: Allow a Store change listener to dispose its own generated Store instance without
+  holding the generated handle table borrow across synchronous notifications.
+- 7bc0a50: Report unsupported fields and recursive references in resolved Store snapshot schemas instead of silently degrading their declarations. Diagnostics identify the field path and use additive Rust source positions when available; failed builds preserve the previous successful artifacts. Existing schema-v1 producers remain readable without source positions. Missing schema metadata remains explicitly unknown, including hand-written ToJs values that the current protocol cannot distinguish from missing metadata.
+
 ## 0.1.0-beta.0
 
 ### Patch Changes

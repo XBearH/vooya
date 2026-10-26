@@ -3,6 +3,28 @@
 Historical entries were reconstructed from published package metadata and release
 snapshots; see [release history evidence](../../docs/maintainers/release-history.md).
 
+## 0.2.0-alpha.1
+
+### Minor Changes
+
+- ffdb8ce: Retire the custom component source format from the current development line.
+  Compile ordinary Rust Components and Stores through schema-driven bindings in
+  Vite, Webpack, and Rspack. Remove the old parser, formatter, loader branches,
+  declaration exports, and `buildApplication({ components })` input. Migrate
+  examples and acceptance fixtures to Rust and referenced CSS. Schema-generated
+  React declarations retain the host `className` prop. Existing
+  applications using removed inputs or APIs must follow the migration guide;
+  historical releases retain their original behavior.
+
+### Patch Changes
+
+- Updated dependencies [040fef3]
+- Updated dependencies [ffdb8ce]
+- Updated dependencies [7fe6eb1]
+- Updated dependencies [c94d8fc]
+- Updated dependencies [7bc0a50]
+  - @vooya/provider-rust@0.2.0-alpha.1
+
 ## 0.2.0-alpha.0
 
 ### Minor Changes

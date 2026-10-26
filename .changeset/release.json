@@ -2,35 +2,47 @@
   "packages": [
     {
       "name": "@vooya/build-core",
+      "version": "0.2.0-alpha.1"
+    },
+    {
+      "name": "@vooya/compiler",
       "version": "0.2.0-alpha.0"
     },
     {
-      "name": "@vooya/preset",
+      "name": "@vooya/core",
       "version": "0.2.0-alpha.0"
     },
     {
       "name": "@vooya/provider-rust",
-      "version": "0.2.0-alpha.0"
+      "version": "0.2.0-alpha.1"
     },
     {
       "name": "@vooya/react",
-      "version": "0.2.0-alpha.0"
+      "version": "0.2.0-alpha.1"
     },
     {
       "name": "@vooya/rspack",
+      "version": "0.2.0-alpha.1"
+    },
+    {
+      "name": "@vooya/solid",
+      "version": "0.2.0-alpha.0"
+    },
+    {
+      "name": "@vooya/svelte",
       "version": "0.2.0-alpha.0"
     },
     {
       "name": "@vooya/vite",
-      "version": "0.2.0-alpha.0"
+      "version": "0.2.0-alpha.1"
     },
     {
       "name": "@vooya/vue",
-      "version": "0.2.0-alpha.0"
+      "version": "0.2.0-alpha.1"
     },
     {
       "name": "@vooya/webpack",
-      "version": "0.2.0-alpha.0"
+      "version": "0.2.0-alpha.1"
     }
   ]
 }

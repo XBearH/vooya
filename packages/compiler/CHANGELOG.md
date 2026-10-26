@@ -3,6 +3,23 @@
 Historical entries were reconstructed from published package metadata and release
 snapshots; see [release history evidence](../../docs/maintainers/release-history.md).
 
+## 0.2.0-alpha.0
+
+### Minor Changes
+
+- ffdb8ce: Retire the custom component source format from the current development line.
+  Compile ordinary Rust Components and Stores through schema-driven bindings in
+  Vite, Webpack, and Rspack. Remove the old parser, formatter, loader branches,
+  declaration exports, and `buildApplication({ components })` input. Migrate
+  examples and acceptance fixtures to Rust and referenced CSS. Schema-generated
+  React declarations retain the host `className` prop. Existing
+  applications using removed inputs or APIs must follow the migration guide;
+  historical releases retain their original behavior.
+
+### Patch Changes
+
+- 040fef3: Require patched CSS selector and TOML parsers to avoid excessive parsing time on large flat selectors and TOML documents. Raise the postcss-selector-parser minimum to 7.1.6 and pin smol-toml to 1.9.1 while preserving the existing CSS and Cargo manifest APIs.
+
 ## 0.1.0-beta.0
 
 ### Patch Changes
