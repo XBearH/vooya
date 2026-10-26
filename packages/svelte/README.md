@@ -53,5 +53,16 @@ implementation output, not a stable public IR for applications to author.
 `useVooyaStore(factory, props, options?)` is an advanced adapter API for custom
 ownership. The generated `useName()` entry is the normal application path.
 
+Current development source routes Store creation, initial snapshot, and
+subscription failures to `onError`, clears the failed binding, and releases
+owned instances once. Notification snapshot failures retain the last good
+state and allow later notifications to recover. Cleanup always attempts disposal
+even if unsubscribe throws; cleanup errors during failed attachment preserve
+the original error. Normal unmount cleanup errors follow the framework's
+lifecycle error handling. These changes are not yet released.
+
+Late initialization releases the instance without attaching it; late errors
+and custom factory callbacks do not notify a destroyed owner.
+
 See the [framework capability matrix](https://github.com/vooyajs/vooya/blob/main/docs/project/compatibility.md#beta-framework-capabilities)
 for the beta support level and tested consumer paths.

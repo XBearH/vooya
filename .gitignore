@@ -23,6 +23,5 @@ packages/*/.svelte-kit
 packages/*/.artifact-build
 *.wasm
 *.wasm.d.ts
-*.d.voo.ts
 *.tsbuildinfo
 .DS_Store

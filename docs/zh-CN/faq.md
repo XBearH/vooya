@@ -5,8 +5,9 @@
 已发布 Beta 的 source-authoring 路径需要 Cargo、稳定 Rust、`wasm32-unknown-unknown`
 和 `wasm-bindgen-cli 0.2.115`。可选托管 preset 已作为
 `@vooya/preset@0.2.0-alpha.0` 发布，需显式选择 Alpha；它仍需宿主 SDK/linker，
-也不等于物理上不安装 Rust 的机器已经得到完整认证。预编译消费者未来可能不需要 Rust，
-但正式产品尚未发布。
+也不等于物理上不安装 Rust 的机器已经得到完整认证。当前开发线已移除专用的组件包
+builder 和 Vue 消费 fixture；组件作者自行组织 JS/WASM 入口、资源、声明与 npm
+元数据。preset 只负责固定工具链，详见[退役记录](../rfcs/0006-precompiled-vue-artifacts.md)。
 
 ## TypeScript 是用户依赖吗？
 
@@ -20,14 +21,15 @@
 
 ## `.voo` 怎么了？
 
-`.voo` 是验证 island model 时的中间探索格式，已经退休；新组件使用普通
-`.rs`、role attributes 和 `rsx!`。
+当前开发线已经移除自定义格式、parser、formatter 和旧 loader 分支。组件和 Store
+统一使用普通 `.rs`、role attributes 和独立 CSS。历史发布版本保持原状，
+迁移方法见[格式退役说明](./project/retired-authoring.md)。
 
 ## Webpack/Rspack 支持吗？
 
-有 experimental first-party adapter。Vite 是主路径；Rspack 证据下限为 2.1.10，
-Webpack 为 5。已发布 beta.0 仅有 legacy `.voo` fixture；普通 `.rs` 接入是 main
-的未发布 0.2 候选，新项目先用 Vite。未列版本、SSR、hydration、Turbopack 等都不能推断支持。
+可选的 0.2 alpha 已有普通 Rust 文件接入，并验证了 Vue/React 生产路径和 Vue watch
+失败恢复。其他 framework/watch 组合仍未完整验收，所以标为实验性；不是空包或仅有设计。
+Vite 仍是主路径，详见[兼容性矩阵](./project/compatibility.md)。
 
 ## 已发布 Beta 有哪些 framework adapter？
 

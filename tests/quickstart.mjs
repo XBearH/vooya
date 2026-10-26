@@ -94,7 +94,7 @@ function verifyQuickstart(framework, packages) {
   if (!readdirSync(typesRoot).some((file) => file.endsWith(".d.rs.ts"))) {
     throw new Error(`${framework} quickstart did not generate central Rust-file declarations.`);
   }
-  if (readdirSync(resolve(project, "src")).some((file) => file.endsWith(".d.rs.ts") || file.endsWith(".d.voo.ts"))) {
+  if (readdirSync(resolve(project, "src")).some((file) => file.endsWith(".d.rs.ts"))) {
     throw new Error(`${framework} quickstart polluted its source directory with declarations.`);
   }
   const metadata = JSON.parse(readFileSync(resolve(project, ".vooya/metadata.json"), "utf8"));

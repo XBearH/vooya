@@ -74,7 +74,7 @@ function matchingFixture({ platform = "linux", cargoPath, rustcPath, wasmBindgen
 }
 
 function inspect(options) {
-  return inspectToolchain({ ...options, probeManifestPath });
+  return inspectToolchain({ platform: "linux", ...options, probeManifestPath });
 }
 
 test("doctor accepts a matching Cargo-selected rustup toolchain", () => {

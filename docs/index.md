@@ -22,6 +22,19 @@ features:
     details: Vooya connects Rust and WebAssembly to existing bundlers and framework adapters.
 ---
 
+## How Vooya fits into your stack
+
+Your framework owns the application. Your bundler owns the build. Vooya connects
+them to Rust/WASM through language providers, typed bindings, and framework
+adapters.
+
+<a href="/architecture.svg"><img src="/architecture.svg" width="1448" height="1086" alt="Vooya architecture: bundlers, language providers, and native tools at build time; framework adapters, WASM, and browser APIs at runtime."></a>
+
+Rust is implemented today. Dashed providers show planned extensions; asterisks
+mark experimental integrations. The optional preset prepares native build tools;
+the browser runs the generated JavaScript and WASM. See the
+[compatibility matrix](project/compatibility.md) for supported combinations.
+
 ## Start with the integration layer
 
 An existing traditional Web application may have one capability that belongs in
@@ -80,10 +93,10 @@ Vooya first published all ten packages at `0.1.0-beta.0`. The npm `beta` channel
 now has `@vooya/vite`, `@vooya/react`, `@vooya/solid`, and `@vooya/svelte` at
 `0.1.0-beta.2`, and `@vooya/vue` at `0.1.0-beta.1`; the other five remain at beta.0. Use each package's `beta` tag,
 not a forced shared version. The Vite Rust-file path is the primary source
-authoring route; published Rspack and Webpack evidence uses transitional
-fixtures. Their Rust-file integration and other [0.2 additions](project/next-release.md)
+authoring route. The older non-Vite beta packages do not implement ordinary
+Rust source integration. Their Rust-file integration and other [0.2 additions](project/next-release.md)
 are available through the opt-in `0.2.0-alpha.0` package set. Beta remains the default
 quickstart. Source authors use system Rust/WASM tools or the optional alpha preset;
-host SDK/linker prerequisites still apply. A supported precompiled component product is
-not published yet. Read [Project status](project/status.md) for the evidence
+host SDK/linker prerequisites still apply. Component authors own their package
+entry points and npm publication. Read [Project status](project/status.md) for the evidence
 behind these statements.

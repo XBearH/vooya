@@ -18,7 +18,7 @@ export interface VooyaStore<TSnapshot = unknown> {
 export interface VooyaStoreOptions {
   /** Dispose an instance-scoped store when this component unmounts. */
   disposeOnUnmount?: boolean;
-  /** Receive asynchronous store creation failures. */
+  /** Receive store creation, attachment, and notification snapshot failures. */
   onError?: (cause: unknown) => void;
 }
 
@@ -64,41 +64,79 @@ export function useVooyaStore<TSnapshot>(
 ) {
   const lazy = typeof source === "function";
   const pending = source && typeof source === "object" && "then" in source;
-  const snapshot = shallowRef<TSnapshot | undefined>(
-    lazy || pending ? undefined : (source as VooyaStore<TSnapshot>).getSnapshot(),
-  );
+  const snapshot = shallowRef<TSnapshot>();
   let store: VooyaStore<TSnapshot> | undefined;
   let unsubscribe: (() => void) | undefined;
   let active = true;
-  const attach = (resolved: VooyaStore<TSnapshot>) => {
-    if (!active) {
-      resolved.dispose();
-      return;
+  let failed = false;
+  const release = () => {
+    const current = store;
+    const cleanup = unsubscribe;
+    store = undefined;
+    unsubscribe = undefined;
+    try {
+      cleanup?.();
+    } finally {
+      if (options.disposeOnUnmount) current?.dispose();
     }
-    store = resolved;
-    snapshot.value = resolved.getSnapshot();
-    unsubscribe = resolved.subscribe(() => {
+  };
+  const fail = (cause: unknown) => {
+    failed = true;
+    try {
+      release();
+    } catch {
+      // Preserve the attachment error if releasing the failed store also fails.
+    }
+    snapshot.value = undefined;
+    if (active) options.onError?.(cause);
+  };
+  const attach = (resolved: VooyaStore<TSnapshot>) => {
+    try {
+      if (!active) {
+        resolved.dispose();
+        return;
+      }
+      store = resolved;
       snapshot.value = resolved.getSnapshot();
-    });
+      if (!active) return;
+      unsubscribe = resolved.subscribe(() => {
+        if (!active || store !== resolved) return;
+        let next: TSnapshot;
+        try {
+          next = resolved.getSnapshot();
+        } catch (cause) {
+          options.onError?.(cause);
+          return;
+        }
+        snapshot.value = next;
+      });
+      if (!active) release();
+    } catch (cause) {
+      fail(cause);
+    }
   };
   const stop = () => {
     active = false;
-    unsubscribe?.();
-    unsubscribe = undefined;
-    if (options.disposeOnUnmount) store?.dispose();
-    store = undefined;
+    release();
   };
 
+  // Immediate stores remain readable during SSR; lazy factories wait for mount.
+  if (!lazy && !pending) {
+    const immediate = source as VooyaStore<TSnapshot>;
+    try {
+      snapshot.value = immediate.getSnapshot();
+    } catch (cause) {
+      store = immediate;
+      fail(cause);
+    }
+  }
   onMounted(() => {
+    if (failed) return;
     if (lazy || pending) {
-      // Factories must not start WASM work during SSR setup. Resolve them only
-      // after hydration, with the same rejection and late-disposal path.
       const resolved = typeof source === "function"
         ? Promise.resolve().then(source)
         : Promise.resolve(source);
-      resolved.then(attach).catch((cause) => {
-        if (active) options.onError?.(cause);
-      });
+      resolved.then(attach, fail);
     } else {
       attach(source as VooyaStore<TSnapshot>);
     }

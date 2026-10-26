@@ -20,7 +20,7 @@ export function isVooyaSourceChange(
   watchedRustRoots: string[] = [],
 ): boolean {
   if (generatedWorkspaceRoot && isPathInside(file, generatedWorkspaceRoot)) return false;
-  return file.endsWith(".voo") || file.endsWith(".rs") || watchedRustRoots.some((root) => isPathInside(file, root));
+  return file.endsWith(".rs") || watchedRustRoots.some((root) => isPathInside(file, root));
 }
 
 export function unresolvedRustImportMessage(

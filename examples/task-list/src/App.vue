@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import TaskList from "./TaskList.voo";
+import TaskList from "./TaskList.rs";
 </script>
 
 <template>

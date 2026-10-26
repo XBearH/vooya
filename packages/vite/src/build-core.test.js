@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { parse } from "smol-toml";
 import test from "node:test";
 
 import { CargoBuildError, VooyaUserError } from "@vooya/build-core";
@@ -212,8 +213,9 @@ test("adds the public vooya authoring crate for Rust-file sources", () => {
 });
 
 test("generates structured application dependencies and browser features", () => {
+  const applicationRoot = resolve(tmpdir(), "vooya-manifest-consumer");
   const manifest = generatedCargoManifest({
-    applicationRoot: "/consumer",
+    applicationRoot,
     runtimeCrateRoot: "/runtime",
     rust: {
       dependencies: {
@@ -228,7 +230,7 @@ test("generates structured application dependencies and browser features", () =>
     manifest,
     /"serde" = \{ version = "1", default-features = false, features = \["derive"\] \}/,
   );
-  assert.match(manifest, /"shared-math" = \{ path = "\/consumer\/rust\/shared-math" \}/);
+  assert.equal(parse(manifest).dependencies["shared-math"].path, resolve(applicationRoot, "rust/shared-math"));
   assert.match(manifest, /"HtmlCanvasElement"/);
 });
 
@@ -245,6 +247,7 @@ test("rejects overrides of compiler-managed Rust dependencies", () => {
 });
 
 test("resolves path dependencies from the application root", () => {
+  const applicationRoot = resolve(tmpdir(), "vooya-dependency-consumer");
   assert.deepEqual(
     resolveRustDependencyRoots(
       {
@@ -253,14 +256,16 @@ test("resolves path dependencies from the application root", () => {
           shared: { path: "rust/shared" },
         },
       },
-      "/consumer",
+      applicationRoot,
     ),
-    ["/consumer/rust/shared"],
+    [resolve(applicationRoot, "rust/shared")],
   );
 });
 
-test("maps extracted Rust diagnostics back to the voo source", () => {
-  const generated = "/project/target/vooya/components/0-Counter.rs";
+test("maps copied Rust diagnostics back to the authored source", () => {
+  const generatedRoot = resolve(tmpdir(), "vooya-diagnostic-project/.vooya/build");
+  const generated = resolve(generatedRoot, "src/rust/src/Counter.rs");
+  const authored = resolve(tmpdir(), "vooya-diagnostic-project/src/Counter.rs");
   const diagnostic = remapRustDiagnostic(
     {
       level: "error",
@@ -268,15 +273,11 @@ test("maps extracted Rust diagnostics back to the voo source", () => {
       rendered: `error: cannot find value\n --> ${generated}:4:9\n  |\n4 | missing\n  | ^^^^^^^\n`,
       spans: [{ file_name: generated, line_start: 4, column_start: 9 }],
     },
-    new Map([
-      [
-        generated,
-        { id: "/project/src/Counter.voo", startLine: 10, generatedLineOffset: 1 },
-      ],
-    ]),
+    new Map([[generated, { id: authored }]]),
+    generatedRoot,
   );
 
-  assert.match(diagnostic, /\/project\/src\/Counter\.voo:12:9/);
-  assert.match(diagnostic, /12 \| missing/);
-  assert.doesNotMatch(diagnostic, /0-Counter\.rs:4:9/);
+  assert.ok(diagnostic.includes(`${authored}:4:9`), diagnostic);
+  assert.match(diagnostic, /4 \| missing/);
+  assert.equal(diagnostic.includes(`${generated}:4:9`), false);
 });

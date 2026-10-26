@@ -78,7 +78,6 @@ try {
       for (const file of [
         "dist/index.d.ts",
         "dist/build-core.d.ts",
-        "dist/voo-format.d.ts",
         "dist/runtime.d.ts",
       ]) {
         assert(files.has(file), name, `archive is missing public plugin types ${file}`);
@@ -157,14 +156,13 @@ function verifyTypeConsumer(packedPackages: ReadonlyMap<string, PackedArchive>, 
   );
   writeFileSync(
     join(consumer, "consumer.ts"),
-    `import { parseVooComponent } from "@vooya/compiler";
-import type { SourceComponent } from "@vooya/compiler";
+    `import { compileComponentStyle, generatedScopeId } from "@vooya/compiler";
 import { vooya } from "@vooya/vite";
 import {
   buildApplication,
   cleanVooyaWorkspace,
   resolveVooyaWorkspace,
-  writeVooDeclarations,
+  writeRustSchemaDeclarations,
 } from "@vooya/build-core";
 import { buildApplication as buildRustApplication } from "@vooya/provider-rust";
 import type { BuildApplicationOptions as RustOptions, BuildApplicationResult as RustResult } from "@vooya/provider-rust";
@@ -177,8 +175,7 @@ type ResultIdentity = Assert<Equal<RustResult, LegacyResult>>;
 type FunctionIdentity = Assert<Equal<typeof buildRustApplication, typeof buildApplication>>;
 const directBuilder: typeof buildApplication = buildRustApplication;
 void directBuilder;
-import { buildPrecompiledVueArtifact } from "@vooya/vite/build";
-import { formatVooComponent } from "@vooya/vite/format";
+import { buildApplication as buildViteApplication } from "@vooya/vite/build";
 import { assertVooAbiVersion, initializeWasm } from "@vooya/vite/runtime";
 import { vooyaRsbuild, vooyaRspack } from "@vooya/rspack";
 import { vooyaWebpack } from "@vooya/webpack";
@@ -186,18 +183,15 @@ import { defineVooyaStore as defineSolidVooyaStore } from "@vooya/solid";
 import { defineVooyaStore as defineSvelteVooyaStore } from "@vooya/svelte";
 import { prepareToolchain } from "@vooya/preset";
 
-void parseVooComponent;
+void compileComponentStyle;
+void generatedScopeId;
 void vooya;
 void vooya({ framework: "svelte" });
 // @ts-expect-error unknown framework adapters must fail at the public type boundary.
 void vooya({ framework: "angular" });
-const component: SourceComponent = {
-  format: "source", id: "/consumer/Counter.voo", name: "Counter", props: [], events: [],
-  rust: { content: "", startLine: 1 },
-};
 function verifyBuildCoreContract() {
   const result = buildApplication({
-    applicationRoot: "/consumer", components: [component], rust: { webSysFeatures: ["Node"] },
+    applicationRoot: "/consumer", rust: { webSysFeatures: ["Node"] },
     workspaceRoot: "/consumer/.vooya", workspacePath: "/consumer/.vooya/build", outputDir: "/consumer/.vooya/wasm",
     buildMode: "production", framework: "vue",
   });
@@ -210,9 +204,9 @@ function verifyBuildCoreContract() {
 void verifyBuildCoreContract;
 void cleanVooyaWorkspace;
 void resolveVooyaWorkspace;
-void writeVooDeclarations;
-void buildPrecompiledVueArtifact;
-void formatVooComponent;
+void writeRustSchemaDeclarations;
+const viteBuilder: typeof buildApplication = buildViteApplication;
+void viteBuilder;
 void assertVooAbiVersion;
 void initializeWasm;
 void vooyaRsbuild;

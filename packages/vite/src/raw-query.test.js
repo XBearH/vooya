@@ -34,19 +34,19 @@ test("Rust imports keep Vite's root, relative, alias and query resolution", asyn
   }
 });
 
-test("Vite preserves Rust and Voo source strings for direct and glob raw imports", async () => {
+test("Vite preserves Rust source strings for direct and glob raw imports", async () => {
   const root = realpathSync(mkdtempSync(resolve(tmpdir(), "vooya-raw-query-")));
   const rust = "// source shown in the editor\npub struct WorkflowReplay;\n";
-  const voo = "<component name=\"Example\">\n</component>\n";
+  const example = "// another Rust example\npub struct Example;\n";
   writeFileSync(resolve(root, "WorkflowReplay.rs"), rust);
-  writeFileSync(resolve(root, "Example.voo"), voo);
+  writeFileSync(resolve(root, "Example.rs"), example);
   writeFileSync(resolve(root, "entry.js"), `
     import direct from './WorkflowReplay.rs?raw';
     import aliased from '@source/WorkflowReplay.rs?raw';
     import combined from './WorkflowReplay.rs?import&raw';
     import reversed from './WorkflowReplay.rs?raw&import';
     export { direct, aliased, combined, reversed };
-    export const sources = import.meta.glob('./*.{rs,voo}', {
+    export const sources = import.meta.glob('./*.rs', {
       eager: true, import: 'default', query: '?raw',
     });
   `);
@@ -59,7 +59,7 @@ test("Vite preserves Rust and Voo source strings for direct and glob raw imports
     server = await createServer({ ...config, server: { middlewareMode: true } });
     const imported = await server.ssrLoadModule('/entry.js');
     for (const name of ['direct', 'aliased', 'combined', 'reversed']) assert.equal(imported[name], rust);
-    assert.deepEqual(imported.sources, { './Example.voo': voo, './WorkflowReplay.rs': rust });
+    assert.deepEqual(imported.sources, { './Example.rs': example, './WorkflowReplay.rs': rust });
     const response = await server.transformRequest('/WorkflowReplay.rs?raw');
     assert.match(response.code, /export default "\/\/ source shown/);
     const result = await build({ ...config, build: {
@@ -71,7 +71,7 @@ test("Vite preserves Rust and Voo source strings for direct and glob raw imports
     assert.equal(production.aliased, rust);
     assert.equal(production.combined, rust);
     assert.equal(production.reversed, rust);
-    assert.deepEqual(production.sources, { './Example.voo': voo, './WorkflowReplay.rs': rust });
+    assert.deepEqual(production.sources, { './Example.rs': example, './WorkflowReplay.rs': rust });
   } finally {
     await server?.close();
     rmSync(root, { recursive: true, force: true });

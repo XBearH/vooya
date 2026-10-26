@@ -36,6 +36,26 @@ jobs:
         run: node scripts/generated/verify-change-policy.js --base "$RELEASE_BASE"
       - run: npm run test:release-contract
 
+  vite-unit-portability:
+    name: Vite unit fixtures (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: node scripts/verify-lockfile-registry.mjs
+      - run: npm ci --ignore-scripts
+      - run: npm run build --workspace @vooya/vite
+      - name: Test paths and simulated toolchains without compiling Rust
+        run: node --test packages/vite/src/build-core.test.js packages/vite/src/doctor.test.js
+
   source-compatibility:
     name: Source quickstart (${{ matrix.os }}, Node ${{ matrix.node }})
     runs-on: ${{ matrix.os }}

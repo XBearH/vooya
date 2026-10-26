@@ -7,7 +7,7 @@ import { build } from "vite";
 import { compile } from "svelte/compiler";
 import { JSDOM } from "jsdom";
 
-test("Svelte routes synchronous and asynchronous loader and factory failures to onError", async () => {
+test("Svelte routes synchronous and asynchronous loader, factory and Store attachment failures to onError", async () => {
   const temporary = await mkdtemp(fileURLToPath(new URL("../.lifecycle-", import.meta.url)));
   const dom = new JSDOM("<body></body>", { url: "http://localhost/" });
   for (const key of ["window", "document", "Node", "Element", "HTMLElement", "Text", "Comment", "CustomEvent"]) {
@@ -22,12 +22,12 @@ test("Svelte routes synchronous and asynchronous loader and factory failures to 
       import { mount, unmount, flushSync } from "svelte";
       import { defineVooyaComponent } from ${JSON.stringify(adapter)};
       import StoreProbe from "store-probe.svelte";
-      export function run(target, kind, factory, onError) {
+      export function run(target, kind, factory, onError, onBinding = () => {}) {
         const Component = kind === "store" ? StoreProbe : defineVooyaComponent({
           contract: { abiVersion: 1, name: "FailedLoader", props: [], events: [] },
           loadBindings: factory,
         });
-        const instance = mount(Component, { target, props: { factory, onError } });
+        const instance = mount(Component, { target, props: { factory, onError, onBinding } });
         flushSync();
         return () => unmount(instance);
       }
@@ -43,7 +43,7 @@ test("Svelte routes synchronous and asynchronous loader and factory failures to 
         resolveId(id) { if (id === "store-probe.svelte") return "\0store-probe.svelte"; },
         load(id) {
           if (id === "\0store-probe.svelte") {
-            return `<script>import { useVooyaStore } from ${JSON.stringify(adapter)}; export let factory; export let onError; useVooyaStore(factory, undefined, { onError });</script>`;
+            return `<script>import { useVooyaStore } from ${JSON.stringify(adapter)}; export let factory; export let onError; export let onBinding; onBinding(useVooyaStore(factory, undefined, { onError }));</script>`;
           }
         },
         transform(source, id) {
@@ -67,6 +67,75 @@ test("Svelte routes synchronous and asynchronous loader and factory failures to 
           await stop();
         }
       }
+    }
+    for (const stage of ["getSnapshot", "subscribe"]) {
+      const cause = new Error(stage);
+      const errors = [];
+      let disposed = 0;
+      let binding;
+      let value;
+      const stop = run(document.body, "store", () => ({
+        getSnapshot: () => 1,
+        subscribe: () => () => {},
+        dispose() { disposed++; throw new Error("cleanup failed"); },
+        [stage]() { throw cause; },
+      }), (error) => errors.push(error), (result) => { binding = result; });
+      const unsubscribe = binding.state.subscribe((next) => { value = next; });
+      try {
+        await new Promise((resolve) => setImmediate(resolve));
+        assert.deepEqual(errors, [cause]);
+        assert.equal(binding.store, undefined);
+        assert.equal(value, undefined);
+      } finally {
+        unsubscribe();
+        await stop();
+      }
+      assert.equal(disposed, 1);
+    }
+    {
+      const cause = new Error("snapshot failed");
+      const errors = [];
+      let value = 1;
+      let mirrored;
+      let listener;
+      let binding;
+      const stop = run(document.body, "store", () => ({
+        getSnapshot() { if (value === 2) throw cause; return value; },
+        subscribe(next) { listener = next; return () => { listener = undefined; }; },
+        dispose() {},
+      }), (error) => errors.push(error), (result) => { binding = result; });
+      const unsubscribe = binding.state.subscribe((next) => { mirrored = next; });
+      try {
+        await new Promise((resolve) => setImmediate(resolve));
+        value = 2;
+        listener();
+        assert.deepEqual(errors, [cause]);
+        assert.equal(mirrored, 1);
+        value = 3;
+        listener();
+        assert.equal(mirrored, 3);
+      } finally {
+        unsubscribe();
+        await stop();
+      }
+      assert.equal(listener, undefined);
+    }
+    {
+      const errors = [];
+      let resolveStore;
+      let disposed = 0;
+      const stop = run(document.body, "store", () => new Promise((resolve) => {
+        resolveStore = resolve;
+      }), (error) => errors.push(error));
+      await stop();
+      resolveStore({
+        getSnapshot() { assert.fail("late store must not attach"); },
+        subscribe() { assert.fail("late store must not subscribe"); },
+        dispose() { disposed++; throw new Error("late cleanup failed"); },
+      });
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.equal(disposed, 1);
+      assert.deepEqual(errors, []);
     }
     for (const fails of [false, true]) {
       const errors = [];

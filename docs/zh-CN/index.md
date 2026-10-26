@@ -22,6 +22,17 @@ features:
     details: Vooya 连接 Rust/WASM、框架适配器和 bundler，而不是替换它们。
 ---
 
+## Vooya 在技术栈中的位置
+
+前端框架管理应用，bundler 负责构建。Vooya 通过语言 provider、类型绑定和框架
+适配器，把 Rust/WASM 接入这套已有的技术栈。
+
+<a href="/architecture.svg"><img src="/architecture.svg" width="1448" height="1086" alt="Vooya 架构：构建阶段连接 bundler、语言 provider 和原生工具链；运行阶段连接框架适配器、WASM 与浏览器 API。"></a>
+
+目前已实现 Rust provider；虚线表示计划中的语言扩展，星号表示实验性集成。
+可选的 preset 准备的是原生构建工具，浏览器执行的是生成的 JavaScript 和 WASM。
+具体支持组合见[兼容性矩阵](project/compatibility.md)。
+
 ## 为什么会有 Vooya
 
 传统 Web 应用往往只想把一个局部能力交给 Rust，却不想重写页面、路由、
@@ -63,7 +74,7 @@ workload 仍应与真实宿主基线测量。
 首个 Beta 的十个公开包均为 `0.1.0-beta.0`。当前 npm `beta` 渠道中，
 `@vooya/vite`、`@vooya/react`、`@vooya/solid`、`@vooya/svelte` 已为
 `0.1.0-beta.2`，`@vooya/vue` 为 `0.1.0-beta.1`，其余五个仍为 beta.0。请按包使用 `beta` 标签，不要强制同版。Vite Rust-file 路径是主要 source-authoring
-路径，Rspack 与 Webpack 仍是 experimental；预编译组件产品尚未正式发布。
+路径，Rspack 与 Webpack 仍是 experimental；组件作者自行组织包入口和 npm 发布。
 请从[快速开始](guide/getting-started.md)开始，再看[项目状态](project/status.md)。
 
 托管工具链、具名 SSR/Nuxt 与 Rust-file bundler 路径现可通过[可选的 0.2 Alpha](project/next-release.md)使用；默认快速开始仍用 Beta，Octane 仍是延期的私有实验。

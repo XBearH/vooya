@@ -53,5 +53,5 @@ executable test helpers, generated declarations, and repository language statist
 
 The most useful contributions right now are source-authoring ergonomics,
 clean-machine Rust diagnostics, Vite/Rspack/Webpack evidence, browser QA,
-TypeScript declarations, and documentation. The old `.voo` experiment is not a
-new feature target.
+TypeScript declarations, and documentation. Keep code and examples on the
+ordinary Rust authoring path, including regression tests.

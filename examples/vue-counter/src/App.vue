@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import Counter from "./Counter.voo";
-import FailMount from "./FailMount.voo";
-import LoopEvents from "./LoopEvents.voo";
-import ProtocolEvents from "./ProtocolEvents.voo";
+import Counter from "./Counter.rs";
+import FailMount from "./FailMount.rs";
+import LoopEvents from "./LoopEvents.rs";
+import ProtocolEvents from "./ProtocolEvents.rs";
 
 const initial = ref(1);
 const lastChange = ref<number>();

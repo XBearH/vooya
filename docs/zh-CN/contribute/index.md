@@ -20,6 +20,6 @@ Vooya 是志愿开源协作，不等同于雇佣关系。项目不承诺薪酬�
 
 ## 设计与 RFC
 
-涉及用户可见契约或架构决策时，先提交 `RFC: <proposal>` issue，说明问题、替代方案和验收标准。普通 bug、兼容性证据和文档改动直接提交 issue 或 pull request 即可。`.voo` 是已退休的探索格式，不是新的功能目标。
+涉及用户可见契约或架构决策时，先提交 `RFC: <proposal>` issue，说明问题、替代方案和验收标准。普通 bug、兼容性证据和文档改动直接提交 issue 或 pull request 即可。代码、示例和回归测试统一使用普通 Rust 文件。
 
 更多命令、许可和 pull request 检查见仓库的[贡献指南（英文原文）](https://github.com/vooyajs/vooya/blob/main/CONTRIBUTING.md)。

@@ -87,7 +87,7 @@ and infer the snapshot and declared actions from its Store type. Prefer generate
 | `useVooyaStore` | `(store \| PromiseLike<store>, options?)` | — | Custom integration or shared-instance ownership | Vue `>=3.5.2 <4`; not the primary generated hook |
 | `source` | `VooyaStore \| PromiseLike<VooyaStore>` | required | Pass an instance or generated async store factory | The late instance is disposed if the component unmounts first |
 | `disposeOnUnmount` | `boolean` | `false` | Give this component ownership of disposal | Use `true` for an instance-scoped store; shared stores need an explicit owner |
-| `onError` | `(cause: unknown) => void` | — | Receive async creation failures | It does not retry or hide action errors |
+| `onError` | `(cause: unknown) => void` | — | Receive creation, attachment, and notification snapshot failures | It does not retry or hide action errors |
 
 `useVooyaStore` is an adapter-level API, not the primary cross-framework Store
 entry point and not Vapor-only. This section shows the Vue signature; the other
@@ -111,8 +111,15 @@ a successful value; typed action results are tracked in [Issue #152](https://git
 | Generated component | React component props | — | Import a `#[voo::component]` `.rs` file | React `>=19`; `import Counter from "./Counter.rs"` |
 | Generated hook | `useName(options?)` | — | Consume a `#[voo::store]` `.rs` file | Uses `useSyncExternalStore`; one store instance per hook lifetime |
 | `useVooyaStore` | `(factory, props, options?)` | — | Build a custom adapter or shared-instance integration | Advanced API; factory may return a store or Promise |
-| `onError` | callback | — | Observe creation failures | Reports generated or custom factory creation failures; it does not receive Rust domain events |
+| `onError` | callback | — | Observe creation and subscription failures | It does not receive Rust domain events |
 | `onNotify` | `(name: string, payload: unknown) => void` | — | Instrument a custom factory | Forwarded to custom factories, also in Solid and Svelte; not a typed generated Store event channel |
+
+Current development source also reports React Store subscription failures through
+the latest active `onError` callback and disposes the failed instance once.
+Cleanup failures during attachment do not replace the original initialization
+error. Late initialization after unmount disposes the instance without
+subscribing; late errors and factory callbacks are suppressed. This fix is
+unreleased and does not describe existing npm artifacts.
 
 ## `@vooya/solid`
 
@@ -125,7 +132,7 @@ framework-neutral bridge is wrapped with Solid owners, signals, and cleanup;
 | Generated component | Solid component props | — | Import a `#[voo::component]` `.rs` file | Solid `>=1.9 <2`; callback props use `onEventName` |
 | Generated primitive | `useName(options?)` | — | Consume a `#[voo::store]` `.rs` file | `const { state, add } = useCart(); state()?.count` |
 | `useVooyaStore` | `(factory, props, options?)` | — | Build a custom adapter or shared-instance integration | Advanced API; factory may return a store or Promise |
-| `onError` | `(cause: unknown) => void` | — | Observe an asynchronous factory failure | Cleanup is tied to the current Solid owner |
+| `onError` | `(cause: unknown) => void` | — | Observe Store creation, attachment, and notification snapshot failures | Cleanup is tied to the current Solid owner |
 | `onNotify` | callback field forwarded to a custom factory | — | Advanced factory-specific instrumentation | Generated Solid Stores publish state through subscription; they do not expose a separate notification bus |
 
 The shared generated names intentionally do not force one reactive container
@@ -145,7 +152,7 @@ framework-neutral bridge is wrapped with Svelte component lifecycle and a
 | Generated component | Svelte component props | — | Import a `#[voo::component]` `.rs` file | Svelte `>=5 <6`; callback props use `onEventName` |
 | Generated Store entry | `useName(options?)` | — | Consume a `#[voo::store]` `.rs` file | `const { state, add } = useCart()`; template reads `$state?.count` |
 | `useVooyaStore` | `(factory, props, options?)` | — | Build a custom adapter or shared-instance integration | Advanced API; factory may return a Store or Promise |
-| `onError` | `(cause: unknown) => void` | — | Observe an asynchronous factory failure | Component and generated Store cleanup are tied to Svelte destruction |
+| `onError` | `(cause: unknown) => void` | — | Observe Store creation, attachment, and notification snapshot failures | Component and generated Store cleanup are tied to Svelte destruction |
 | `onNotify` | callback field forwarded to a custom factory | — | Advanced factory-specific instrumentation | Generated Svelte Stores publish through `Readable`; no separate notification bus is documented |
 
 Generated Store domain notifications are not yet available in any first-party
@@ -158,29 +165,40 @@ mount and callback, Store action, Component prop update, generated declarations,
 and one cleanup call each for the Component handle and generated Store. It does
 not cover Svelte 3/4, SvelteKit, SSR, hydration, Vite 8, Rspack, or Webpack.
 
+In current development source, Vue, Solid, and Svelte report Store creation,
+initial snapshot, and subscription failures through `onError` and clear failed
+bindings. Owned instances are released once; Vue custom sources retain their
+`disposeOnUnmount` policy. A notification snapshot failure preserves the last
+good state and a later notification may recover. Cleanup attempts disposal even
+if unsubscribe throws. Cleanup failures during attachment preserve the original
+error; normal unmount cleanup errors use the framework lifecycle error handling.
+Late resolution disposes the instance without attaching it. These fixes are
+unreleased.
+
 ## `@vooya/rspack`
 
-The beta.0 Rspack and Webpack implementations still expose a legacy `.voo`
-loader rule for their experimental fixtures. `.voo` is retired as a new
-authoring format and is scheduled for removal; use Rust-file authoring through
-the primary Vite path until those adapters are migrated.
+Rust-file integration first shipped in the opt-in `0.2.0-alpha.0` package graph.
+This reference describes the current development API. Its loader handles `.rs`
+only; older published packages are unchanged by the [format retirement](../project/retired-authoring.md).
 
-| Export / parameter | Type / values | Default | When to use | Current boundary / minimal example |
-| --- | --- | --- | --- | --- |
-| `vooyaRsbuild(options?)` | `VooyaRsbuildPlugin` | — | Add Vooya to Rsbuild | Experimental; Rspack `>=2.1.10`, Rsbuild `>=2.1.13` |
-| `vooyaRspack(options?)` | `VooyaRspackPlugin` | — | Configure Rspack directly | Experimental; add `plugins: [vooya]` and `vooya.rule()` |
-| `framework` | `"vue" \| "react"` | `"vue"` | Select the host adapter | Current fixtures use the transitional `.voo` path; Rust-file parity is not claimed |
-| `rust`, `workspaceRoot` | Rust options, filesystem path | `{}`, `.vooya/` | Share Rust deps or move generated state | Experimental adapter options; see the package README |
-| `rule()` | `{ test: /\.voo$/, loader, options }` | — | Add the source loader to direct Rspack | Public rule is for the current transitional `.voo` fixture path |
+| Export / parameter | Type / values | Default | Current boundary |
+| --- | --- | --- | --- |
+| `vooyaRsbuild(options?)` | `VooyaRsbuildPlugin` | — | Rspack `>=2.1.10`, Rsbuild `>=2.1.13` |
+| `vooyaRspack(options?)` | `VooyaRspackPlugin` | — | Add `plugins: [vooya]` and `vooya.rule()` |
+| `framework` | `"vue" \| "react" \| "solid" \| "svelte"` | `"vue"` | Vue/React have production browser coverage; Solid/Svelte bundler combinations remain unverified |
+| `rust`, `workspaceRoot`, `toolchain` | Rust options, workspace path, tool selection | `{}`, `.vooya/`, auto | Share dependencies and select system or managed tools |
+| `rule()` | `{ test: /\.rs$/, loader, options }` | — | Import schema-owning Rust Component/Store files |
 
 ## `@vooya/webpack`
 
-| Export / parameter | Type / values | Default | When to use | Current boundary / minimal example |
-| --- | --- | --- | --- | --- |
-| `vooyaWebpack(options?)` | `VooyaWebpackPlugin` | — | Add Vooya to Webpack 5 | Experimental; Webpack `>=5` |
-| `framework` | `"vue" \| "react"` | `"vue"` | Select the host adapter | Current fixtures use the transitional `.voo` path; Rust-file parity is not claimed |
-| `rust`, `workspaceRoot` | Rust options, filesystem path | `{}`, `.vooya/` | Share Rust deps or move generated state | Experimental adapter options; see the package README |
-| `rule()` | `{ test: /\.voo$/, use: [{ loader, options }] }` | — | Add the source loader to Webpack | Requires normal framework, CSS, and async WASM config |
+| Export / parameter | Type / values | Default | Current boundary |
+| --- | --- | --- | --- |
+| `vooyaWebpack(options?)` | `VooyaWebpackPlugin` | — | Webpack `>=5`; configure normal framework, CSS and async WASM rules |
+| `framework` | `"vue" \| "react" \| "solid" \| "svelte"` | `"vue"` | Vue/React have production browser coverage; other combinations remain unverified |
+| `rust`, `workspaceRoot`, `toolchain` | Rust options, workspace path, tool selection | `{}`, `.vooya/`, auto | Shared Rust build options |
+| `rule()` | `{ test: /\.rs$/, use: [{ loader, options }] }` | — | Rust source loader; Webpack watch uses a generated runtime marker |
 
-No Web Components, precompiled artifact consumer, SSR, hydration, or general
-renderer API is currently published as part of these packages.
+Vue Rust watch covers failure recovery, linked CSS edits, and new modules.
+React production coverage does not establish React development-server parity.
+These packages do not establish Next.js, SSR, hydration, state-preserving HMR,
+or a published precompiled component product.

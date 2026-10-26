@@ -72,6 +72,12 @@ async function verifyBrowser() {
       stable: true,
       successIsVoid: true,
     });
+    await page.getByRole("button", { name: "Check listener disposal", exact: true }).click();
+    await actionResult.filter({ hasText: "siblingCount" }).waitFor();
+    assert.deepEqual(JSON.parse(await actionResult.textContent()), {
+      firstDisposed: true,
+      siblingCount: 2,
+    });
     if (errors.length > 0) throw new Error(`Rust-file React fixture had browser errors:\n${errors.join("\n")}`);
   } finally {
     try {

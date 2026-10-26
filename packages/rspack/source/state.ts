@@ -6,7 +6,6 @@ type BuildState = {
   styleDependencies: string[];
   wasm: Uint8Array;
   wasmAssetName: string;
-  styleModules: Map<string, string>;
 };
 
 const states = new Map<string, BuildState>();

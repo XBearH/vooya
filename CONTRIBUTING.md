@@ -6,6 +6,9 @@ evidence are more useful than broad framework promises.
 
 This document is the canonical contribution guide for the repository.
 
+Coding agents should also read [AGENTS.md](AGENTS.md) for repository navigation
+and guidance on choosing and reporting validation.
+
 ## Before you start
 
 - Small documentation fixes can be submitted directly as a pull request.
@@ -107,7 +110,7 @@ uniform; apply this rule to new files and when a file is already being moved.
 - Distinguish current behavior, experimental behavior, and future plans.
 - Do not claim that Rust or WASM is universally faster.
 - Performance changes need a reproducible browser workload and comparison.
-- A successful typecheck is not proof that a `.voo` component mounts, updates,
+- A successful typecheck is not proof that a Rust component mounts, updates,
   emits events, disposes, and recovers after a failed Rust build.
 
 ### Keep private coordination out of the repository
@@ -126,8 +129,9 @@ merge.
 | Change area | Typical checks |
 | --- | --- |
 | Documentation | `npm run verify:docs` |
-| Compiler or `.voo` syntax | `npm run test:compiler` and `npm run format:voo:check` |
-| Vite or shared build pipeline | `npm run test:voo`, plus the affected typecheck or compatibility fixture |
+| ABI/style helpers | `npm run test:compiler` |
+| Rust authoring and provider | `npm run test:provider-rust` |
+| Vite or shared build pipeline | `npm run test:vite`, plus the affected typecheck or compatibility fixture |
 | Vue or React adapter | The affected package test and application typecheck |
 | Rspack or Webpack | `npm run test:rspack` or `npm run test:webpack` |
 | Packaging or cross-package behavior | `npm run pack:check` and the affected clean-consumer test |
@@ -136,7 +140,7 @@ Other common commands include:
 
 ```sh
 npm run test:compiler
-npm run test:voo
+npm run test:vite
 npm run test:react
 npm run typecheck
 npm run typecheck:react
@@ -168,6 +172,11 @@ Rust/WASM builds can share generated artifacts, so run build-dependent suites
 serially unless a test explicitly documents that parallel execution is safe.
 
 ## Pull requests
+
+Name branches for the change, using `feat/`, `fix/`, `docs/`, `refactor/`,
+`test/`, or `chore/` followed by a short description, such as
+`fix/rust-workspace-lock` or `docs/readme-architecture`. Avoid tool-name
+prefixes such as `codex/`.
 
 Keep each pull request focused and reviewable:
 

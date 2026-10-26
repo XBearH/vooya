@@ -239,37 +239,66 @@ export function useVooyaStore<
   let createdStore: TStore | undefined;
   let unsubscribe: (() => void) | undefined;
 
+  const release = () => {
+    const current = createdStore;
+    const cleanup = unsubscribe;
+    store = undefined;
+    createdStore = undefined;
+    unsubscribe = undefined;
+    try {
+      cleanup?.();
+    } finally {
+      current?.dispose();
+    }
+  };
+  const refresh = () => {
+    if (!active || !store) return;
+    let next: TSnapshot;
+    try {
+      next = store.getSnapshot();
+    } catch (cause) {
+      options.onError?.(cause);
+      return;
+    }
+    setState(() => next);
+  };
+
   let pending: TStore | Promise<TStore>;
   try {
-    pending = factory(props, options);
+    pending = factory(props, {
+      ...options,
+      onError: (cause) => { if (active) options.onError?.(cause); },
+      onNotify: (name, payload) => { if (active) options.onNotify?.(name, payload); },
+    });
   } catch (cause) {
     pending = Promise.reject(cause);
   }
-  Promise.resolve(pending).then(
-    (resolved) => {
-      createdStore = resolved;
-      if (!active) {
-        resolved.dispose();
-        return;
-      }
-      store = resolved;
-      const publish = () => setState(() => resolved.getSnapshot());
-      publish();
-      const cleanup = resolved.subscribe(publish);
-      unsubscribe = typeof cleanup === "function" ? cleanup : undefined;
-    },
-    (cause) => {
-      if (active) options.onError?.(cause);
-    },
-  );
+  Promise.resolve(pending).then((resolved) => {
+    createdStore = resolved;
+    if (!active) {
+      release();
+      return;
+    }
+    store = resolved;
+    const next = resolved.getSnapshot();
+    setState(() => next);
+    if (!active) return;
+    const cleanup = resolved.subscribe(refresh);
+    unsubscribe = typeof cleanup === "function" ? cleanup : undefined;
+    if (!active) release();
+  }).catch((cause) => {
+    try {
+      release();
+    } catch {
+      // Preserve the attachment error if releasing the failed store also fails.
+    }
+    setState(undefined);
+    if (active) options.onError?.(cause);
+  });
 
   onCleanup(() => {
     active = false;
-    unsubscribe?.();
-    unsubscribe = undefined;
-    const owned = store ?? createdStore;
-    store = undefined;
-    owned?.dispose();
+    release();
   });
 
   return {

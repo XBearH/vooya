@@ -1,7 +1,7 @@
 # Rust-file authoring
 
 Rust-file authoring is the beta path for components and stores. It uses
-ordinary `.rs` files; `.voo.rs` is not part of the contract.
+ordinary `.rs` files.
 
 ## Vooya attribute markers
 
@@ -90,13 +90,10 @@ The bundler generates `createCartStore()` and a `useCart()` entry with the same
 names and fields for the first-party adapters. Its `state` container remains
 framework-native; see the [Store concept](../concepts/store.md).
 
-The earlier `.voo` format combined a manifest, Rust, and CSS in one custom file.
-We moved away from it because it hid Rust from normal tooling, required a
-separate parser and formatter, and made the source contract diverge from the Rust
-compiler. Keeping ordinary `.rs` files makes rust-analyzer, Cargo diagnostics,
-schema derives, and generated bindings follow one source of truth. The old
-format remains only as transitional implementation history and is not a
-new-project authoring choice.
+Ordinary Rust files keep rust-analyzer, Cargo diagnostics, schema derives,
+and generated bindings on one source of truth. The former custom-format
+implementation and fixtures have been removed from this development line;
+see [migration](../project/retired-authoring.md).
 
 ## Roles
 
@@ -280,6 +277,60 @@ Actions are synchronous. A unit-returning action is exposed as a void host
 operation; an action returning `Result<(), JsValue>` propagates its error to
 the generated binding. Failed actions do not roll back mutations made before
 the error, and async actions are outside ABI v1.
+
+### Failed actions keep prior mutations
+
+A fallible action may change the snapshot before it returns an error:
+
+```rust
+use wasm_bindgen::JsValue;
+
+#[voo::action]
+pub fn checked_add(&mut self, amount: u32, fail: bool) -> Result<(), JsValue> {
+    self.count += amount;
+    if fail { Err(JsValue::from_str("action failed")) } else { Ok(()) }
+}
+```
+
+The action boundary also accepts the fully qualified spellings
+`std::result::Result<(), JsValue>` and `::core::result::Result<(), JsValue>`.
+These are the supported path spellings for this result shape; this does not
+promise resolution of arbitrary type aliases.
+
+The generated host action throws when it receives `Err`, but the mutation made
+before the error remains observable. Successful action values are still `void`:
+
+```js
+import createCartStore from "./Store.rs";
+
+const store = await createCartStore();
+let notifications = 0;
+const unsubscribe = store.subscribe(() => notifications++);
+
+const success = store.checked_add(2, false);
+try {
+  store.checked_add(3, true);
+} catch (error) {
+  console.log(String(error));
+}
+
+console.log(success); // undefined
+console.log(store.getSnapshot().count); // 5
+console.log(notifications); // 2
+
+try {
+  store.checked_add(0, true);
+} catch {}
+console.log(notifications); // still 2: the snapshot did not change
+
+unsubscribe();
+store.dispose();
+```
+
+Subscribers are notified when the snapshot changes, even if the action then
+returns `Err`. An error by itself does not notify subscribers when the snapshot
+is unchanged. Successful action values remain `void` today; richer result
+values are tracked in [Issue #152](https://github.com/vooyajs/vooya/issues/152).
 
 `#[voo::events]` currently declares Component callbacks. A Store cannot yet
 attach that trait to generated Rust-to-host notifications, and `useCart()` does

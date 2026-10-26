@@ -1,1 +1,1 @@
-export { default as Counter } from "./Counter.voo";
+export { default as Counter } from "./Counter.rs";

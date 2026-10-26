@@ -79,7 +79,7 @@ Vue 可直接接收生成 factory 的 Promise；React、Solid 和 Svelte 接收 
 | `useVooyaStore` | `(store \| PromiseLike<store>, options?)` | — | 自定义集成或共享实例的生命周期管理 | Vue `>=3.5.2 <4`；不是普通用户的主入口 |
 | `source` | `VooyaStore \| PromiseLike<VooyaStore>` | 必填 | 传入 instance 或 generated async store | 组件先 unmount 时会 dispose late instance |
 | `disposeOnUnmount` | `boolean` | `false` | 让当前组件拥有 disposal | instance-scoped store 通常设为 `true` |
-| `onError` | `(cause: unknown) => void` | — | 接收异步创建失败 | 不负责 retry 或隐藏 action error |
+| `onError` | `(cause: unknown) => void` | — | 接收创建、绑定和通知时的快照读取失败 | 不负责 retry 或隐藏 action error |
 
 `useVooyaStore` 是适配器层 API，不是普通用户的跨框架 Store 入口，也不是 Vapor 专属
 API。它适合共享实例、自定义集成和 adapter 作者。返回 `{ snapshot, dispatch,
@@ -97,8 +97,13 @@ unsubscribe }`；`dispatch(name, ...args)` 调用声明的 store action。
 | Generated component | React component props | — | 导入 `#[voo::component]` `.rs` | React `>=19`；`import Counter from "./Counter.rs"` |
 | Generated hook | `useName(options?)` | — | 消费 `#[voo::store]` `.rs` | `useSyncExternalStore`；每个 hook 生命周期一个 instance |
 | `useVooyaStore` | `(factory, props, options?)` | — | 自定义 adapter 或共享实例集成 | 高级 API；factory 可同步或 Promise |
-| `onError` | callback | — | 观察创建失败 | 接收生成或自定义 factory 的创建失败；不接收 Rust domain event |
+| `onError` | callback | — | 观察创建和订阅失败 | 不接收 Rust domain event |
 | `onNotify` | `(name: string, payload: unknown) => void` | — | custom factory instrumentation | 转发给 custom factory，Solid/Svelte 也提供；不是类型化 generated Store event channel |
+
+当前开发源码还会将 React Store 的订阅失败交给活跃宿主最新的 `onError`，并将失败实例
+清理一次。初始化失败时的清理异常不会覆盖原始错误。实例在卸载后才加载完成时，只做
+dispose，不再订阅；延迟错误和 factory 回调不再通知已失效的宿主。这项修复尚未发布，
+不描述现有 npm 产物的行为。
 
 ## `@vooya/solid`
 
@@ -110,7 +115,7 @@ Solid 保持相同的 generated component 与 `useName()` 命名，但由 Solid 
 | Generated component | Solid component props | — | 导入 `#[voo::component]` `.rs` | Solid `>=1.9 <2`；事件使用 `onEventName` callback prop |
 | Generated primitive | `useName(options?)` | — | 消费 `#[voo::store]` `.rs` | `const { state, add } = useCart(); state()?.count` |
 | `useVooyaStore` | `(factory, props, options?)` | — | 自定义 adapter 或共享实例 | 高级 API；factory 可同步或 Promise |
-| `onError` | `(cause: unknown) => void` | — | 观察异步 factory 失败 | 释放绑定到当前 Solid owner |
+| `onError` | `(cause: unknown) => void` | — | 观察 Store 创建、绑定和通知时的快照读取失败 | 释放绑定到当前 Solid owner |
 | `onNotify` | 转发给 custom factory 的 callback 字段 | — | 高级 factory instrumentation | generated Solid Store 通过 subscription 发布 state，不提供独立 notification bus |
 
 统一 API 不等于强制统一响应式容器：Vue 返回 `Ref`，React 返回 snapshot，Solid 返回
@@ -128,7 +133,7 @@ lifecycle 包装 framework-neutral bridge。Store `state` 是
 | Generated component | Svelte component props | — | 导入 `#[voo::component]` `.rs` | Svelte `>=5 <6`；事件使用 `onEventName` callback prop |
 | Generated Store entry | `useName(options?)` | — | 消费 `#[voo::store]` `.rs` | `const { state, add } = useCart()`；模板读取 `$state?.count` |
 | `useVooyaStore` | `(factory, props, options?)` | — | 自定义 adapter 或共享实例 | 高级 API；factory 可同步或 Promise |
-| `onError` | `(cause: unknown) => void` | — | 观察异步 factory 失败 | Component 与 generated Store cleanup 绑定 Svelte destruction |
+| `onError` | `(cause: unknown) => void` | — | 观察 Store 创建、绑定和通知时的快照读取失败 | Component 与 generated Store cleanup 绑定 Svelte destruction |
 | `onNotify` | 转发给 custom factory 的 callback 字段 | — | 高级 factory instrumentation | generated Svelte Store 通过 `Readable` 发布，不承诺独立 notification bus |
 
 所有 first-party adapter 当前都没有 generated Store 的 domain notification。后续 ABI
@@ -140,28 +145,34 @@ action、Component prop update、generated declarations，以及 Component handl
 generated Store 各一次 cleanup。没有覆盖 Svelte 3/4、SvelteKit、SSR、hydration、
 Vite 8、Rspack 或 Webpack。
 
+当前开发源码中，Vue、Solid、Svelte 的 Store 创建、首次 snapshot 读取和订阅失败
+统一交给 `onError`，并清空失败的绑定。拥有的实例只释放一次；Vue 自定义来源仍遵守
+`disposeOnUnmount`。通知时读取 snapshot 失败会保留最后一次成功的状态，后续通知
+仍可恢复。即使 unsubscribe 抛错也会尝试 dispose；初始化失败时的清理错误不会
+覆盖原始错误，正常卸载的清理错误交由框架生命周期处理。卸载后才创建完成的实例
+直接释放、不再订阅。这些修复尚未发布。
+
 ## `@vooya/rspack`
 
-beta.0 的 Rspack 和 Webpack 实现仍为 experimental fixture 暴露 legacy `.voo`
-loader rule。`.voo` 已作为新 authoring format 退休并计划移除；在这些 adapter
-完成迁移前，请使用主要的 Vite Rust-file 路径。
+普通 Rust 文件接入已随可选的 `0.2.0-alpha.0` 包组合发布。这里描述当前开发线 API，
+loader 只匹配 `.rs`；已经发布的旧版本保持原状。迁移要求见[格式退役说明](../project/retired-authoring.md)。
 
-| 导出/参数 | 类型/取值 | 默认值 | 何时使用 | 当前边界/最小例子 |
-| --- | --- | --- | --- | --- |
-| `vooyaRsbuild(options?)` | `VooyaRsbuildPlugin` | — | 接入 Rsbuild | Experimental；Rspack `>=2.1.10`、Rsbuild `>=2.1.13` |
-| `vooyaRspack(options?)` | `VooyaRspackPlugin` | — | 直接配置 Rspack | Experimental；`plugins: [vooya]` + `vooya.rule()` |
-| `framework` | `"vue" \| "react"` | `"vue"` | 选择宿主 adapter | 当前 fixture 仍是 transitional `.voo`；未宣称 Rust-file parity |
-| `rust`、`workspaceRoot` | Rust options、文件路径 | `{}`、`.vooya/` | 共享依赖或移动 generated state | Experimental adapter options |
-| `rule()` | `{ test: /\.voo$/, loader, options }` | — | 直接 Rspack 加 source loader | 针对 transitional `.voo` fixture |
+| 导出/参数 | 类型/取值 | 默认值 | 当前边界 |
+| --- | --- | --- | --- |
+| `vooyaRsbuild(options?)` | `VooyaRsbuildPlugin` | — | Rspack `>=2.1.10`、Rsbuild `>=2.1.13` |
+| `vooyaRspack(options?)` | `VooyaRspackPlugin` | — | `plugins: [vooya]` + `vooya.rule()` |
+| `framework` | `"vue" \| "react" \| "solid" \| "svelte"` | `"vue"` | Vue/React 有生产浏览器验证；Solid/Svelte 打包器组合尚未验证 |
+| `rust`、`workspaceRoot`、`toolchain` | Rust 选项、工作目录、工具链选择 | `{}`、`.vooya/`、auto | 共享依赖并选择系统或托管工具 |
+| `rule()` | `{ test: /\.rs$/, loader, options }` | — | 加载有 schema 的 Rust Component/Store 文件 |
 
 ## `@vooya/webpack`
 
-| 导出/参数 | 类型/取值 | 默认值 | 何时使用 | 当前边界/最小例子 |
-| --- | --- | --- | --- | --- |
-| `vooyaWebpack(options?)` | `VooyaWebpackPlugin` | — | 接入 Webpack 5 | Experimental；Webpack `>=5` |
-| `framework` | `"vue" \| "react"` | `"vue"` | 选择宿主 adapter | 当前 fixture 仍是 transitional `.voo`；未宣称 Rust-file parity |
-| `rust`、`workspaceRoot` | Rust options、文件路径 | `{}`、`.vooya/` | 共享依赖或移动 generated state | Experimental adapter options |
-| `rule()` | `{ test: /\.voo$/, use: [{ loader, options }] }` | — | 接入 Webpack source loader | 还需要正常 framework、CSS 和 async WASM 配置 |
+| 导出/参数 | 类型/取值 | 默认值 | 当前边界 |
+| --- | --- | --- | --- |
+| `vooyaWebpack(options?)` | `VooyaWebpackPlugin` | — | Webpack `>=5`；需要普通 framework、CSS 和 async WASM 配置 |
+| `framework` | `"vue" \| "react" \| "solid" \| "svelte"` | `"vue"` | Vue/React 有生产浏览器验证；其他组合尚未验证 |
+| `rust`、`workspaceRoot`、`toolchain` | Rust 选项、工作目录、工具链选择 | `{}`、`.vooya/`、auto | 共享 Rust 构建选项 |
+| `rule()` | `{ test: /\.rs$/, use: [{ loader, options }] }` | — | Rust loader；watch 依赖生成的 runtime marker |
 
-已发布 Beta 没有公开 Web Components、预编译 artifact consumer、SSR、hydration 或
-通用 renderer API。
+Vue 的 Rust watch 覆盖失败恢复、关联 CSS 修改和新模块。React 生产验证不等于开发服务器
+已经完整验收。这些包也不代表 Next.js、SSR、hydration、保留状态的 HMR 或已发布预编译组件产品。

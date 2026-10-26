@@ -1,16 +1,20 @@
 // Webpack loads this file through its public loader protocol. Rust/WASM
 // compilation remains in the plugin and shared build core.
-// @ts-nocheck
-import { parseVooComponent } from "@vooya/compiler";
 
-import { renderVooModule } from "./module.js";
 import { getBuildState } from "./state.js";
 
-export default function vooyaWebpackLoader(source) {
+interface RustLoaderContext {
+  resourcePath: string;
+  cacheable(value: boolean): void;
+  getOptions(): { instanceId: string };
+  addDependency(path: string): void;
+}
+
+export default function vooyaWebpackLoader(this: RustLoaderContext): string {
   // The wrapper includes the current generated runtime path, so it must not be
   // restored from Webpack's persistent loader cache after a Rust rebuild.
   this.cacheable(false);
-  const { framework = "vue", instanceId } = this.getOptions();
+  const { instanceId } = this.getOptions();
   const state = getBuildState(instanceId);
   if (!state) {
     throw new Error(
@@ -22,23 +26,7 @@ export default function vooyaWebpackLoader(source) {
   // marker so Webpack reruns this loader and points at the latest runtime.
   this.addDependency(state.generationFile);
   this.addDependency(this.resourcePath);
-  if (this.resourcePath.endsWith(".rs")) {
-    const module = state.rustModules.get(this.resourcePath);
-    if (!module) throw new Error(`No Vooya component or store found for ${this.resourcePath}. Check rust.sourceRoot and avoid mixing legacy .voo and Rust-file authoring in one application.`);
-    return module;
-  }
-  const component = parseVooComponent(source.toString(), this.resourcePath);
-  if (component.format !== "source") {
-    throw new Error(
-      `Webpack source integration requires a source .voo component, received ${component.format}.`,
-    );
-  }
-  component.id = this.resourcePath;
-  this.addDependency(this.resourcePath);
-  return renderVooModule({
-    component,
-    framework,
-    runtimeModule: state.runtimeModule,
-    styleModule: state.styleModules.get(this.resourcePath),
-  });
+  const module = state.rustModules.get(this.resourcePath);
+  if (!module) throw new Error(`No Vooya component or store found for ${this.resourcePath}. Check rust.sourceRoot and rust.entry.`);
+  return module;
 }

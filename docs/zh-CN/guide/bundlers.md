@@ -13,13 +13,14 @@ Solid、Svelte 的已发布 Beta 证据仅覆盖 Vite 7；Alpha 增加 Vite 8 �
 
 使用 `@vooya/rspack` 的 `vooyaRsbuild()` 或直接配置的 `vooyaRspack()`。
 已命名证据使用 Rspack `2.1.10`、Rsbuild `2.1.13`，覆盖 Vue/React 浏览器
-fixture 和 Rslib 输出。已发布 beta.0 仍是 legacy `.voo` fixture 路径，不提供普通 `.rs` 接入；SSR、Module Federation 以及更低版本不在承诺内。
+fixture 和 Rslib 输出。普通 `.rs` 接入需要可选的 0.2 Alpha 包组合；SSR、
+Module Federation 以及更低版本不在承诺内。
 
 ## Webpack（experimental）
 
 使用 `@vooya/webpack` 的 `vooyaWebpack()` 和 Webpack 5。已命名 fixture 覆盖
-5.101.0、5.109.2、生产输出、生命周期行为和开发恢复。已发布 beta.0 的 loader
-仍匹配 legacy `.voo`，不能用它直接导入快速开始的 `.rs` 文件。Webpack 4、SSR、
+5.101.0、5.109.2、生产输出、生命周期行为和开发恢复。普通 Rust-file 接入
+使用 Alpha 精确版本图，当前开发线的 loader 只匹配 `.rs`。Webpack 4、SSR、
 hydration、Module Federation 和 state-preserving HMR 不在当前边界。
 
 ## Alpha 的 Rust-file 路径

@@ -313,4 +313,17 @@ mod tests {
         assert!(store.is_disposed());
         assert_eq!(calls.get(), 0);
     }
+
+    #[test]
+    fn listener_can_dispose_its_store_during_notification() {
+        let store = Store::new(Counter { value: 0 });
+        let dispose_from_listener = store.clone();
+        let _subscription = store.subscribe(move || dispose_from_listener.dispose());
+
+        store.dispatch(|counter| counter.value = 1);
+        store.dispatch(|counter| counter.value = 2);
+
+        assert!(store.is_disposed());
+        assert_eq!(store.snapshot(), 1);
+    }
 }

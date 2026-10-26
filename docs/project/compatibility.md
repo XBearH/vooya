@@ -79,7 +79,6 @@ Only the release evidence above establishes the npm beta boundary.
 | Vue TaskList | Reactive state, keyed rows, filtering, validation error state | `npm run test:e2e` (tasks target) |
 | Vue DataGrid | Filter, sort, virtual scroll, local measurement control | `npm run test:e2e` (benchmark target) |
 | Vue Canvas scatter | 150,000-point initial island, point-count update, zoom/reset, no page or console error | `npm run test:e2e:scatter` |
-| Vue precompiled build fixture | Generated WASM in a clean Vite consumer without Rust tooling; mount and prop update | `npm run test:precompiled-vue` |
 
 ## Rust-file bundler additions
 
@@ -91,6 +90,18 @@ Vue watch fixtures cover invalid Rust and recovery, linked CSS updates, newly
 added `.rs` files, and stable builds after generated output. Applications retain
 responsibility for framework transforms, HTML and CSS rules.
 SSR/Next.js and state-preserving HMR are not implied.
+
+## Why some implemented integrations remain experimental
+
+| Integration | Implemented and exercised | Remaining acceptance gaps |
+| --- | --- | --- |
+| Managed preset | Pinned tools, isolated cache, checksums, locking and retries; three-platform packed consumers and [fresh-cache registry consumers](https://github.com/vooyajs/vooya/actions/runs/37583146228) | Physically Rust-free hosts and interrupted full-install recovery; native SDK/linker remains required; musl Linux and Windows arm64 are not managed targets |
+| Webpack / Rspack | Vue/React Rust Components/Stores, production assets and browser lifecycle; Vue watch error recovery, style edits and new modules | React development-server matrix, Solid/Svelte consumers, exact-registry browser matrix for the bundler combinations, and broader OS/browser coverage |
+
+The [alpha release record](../maintainers/releases/0.2.0-alpha.0.md#executed-registry-consumers)
+separates source-tarball and exact-registry evidence. These are implemented
+features with bounded evidence. Removing the custom source
+format does not fill the unrelated acceptance gaps or change an old npm release.
 
 ## Current-source bundler/toolchain matrix
 
@@ -104,9 +115,9 @@ toolchain; a production smoke does not imply development-server or HMR support.
 | --- | --- | --- | --- |
 | Vite | `>=7 <9` | `npm run test:vite8-frameworks`; `npm run test:vite8` | Vite 8.2.1: separate packed Vue/React/Solid/Svelte production, strict types and dev/error-recovery checks. Vite 7 remains a required regression path; the older compatibility smoke is separate. |
 | Vite 8 + Vue Vapor | Vite `8.2.1`; Vue `3.6.0-beta.17` | `npm run test:vite8-vapor` | Rust-file component mounts in a Vapor app with `vaporInteropPlugin`; experimental evidence only |
-| Vite+ | `0.2.9`, matching core alias `0.2.9` (Vite `8.2.1`) | `npm run test:vite-plus-frameworks`; `npm run test:vite-plus` | Packed Vue/React/Solid/Svelte `.rs` production builds and Chromium interactions, strict declarations, dev rebuilds, Rust error recovery, rapid saves and host component edits. Rust edits use full reload; legacy `.voo` regression is separate. Normal npm installation uses the documented alias/overrides. |
-| Rspack / Rsbuild | Rspack `>=2.1.10`; Rsbuild `>=2.1.13` | `npm run test:rspack` | Experimental packed Vue/React/Rslib/native-Rspack fixtures with WASM, scoped CSS, lifecycle checks, mapped diagnostics, and rebuild recovery. `test:rust-bundlers` adds packed Vue/React `.rs` production builds, Stores, props/events, scoped CSS, and unmount/remount; Vue Rust-file watch also covers failure recovery, style edits and new modules; other framework/watch combinations remain unverified. |
-| Webpack | `>=5` | `npm run test:webpack` | Experimental packed Vue/React production and watch fixtures with emitted WASM, scoped CSS, lifecycle checks, mapped diagnostics, and recovery. `test:rust-bundlers` adds packed Vue/React `.rs` production builds, Stores, props/events, scoped CSS, and unmount/remount; Vue Rust-file watch also covers failure recovery, style edits and new modules; other framework/watch combinations remain unverified. |
+| Vite+ | `0.2.9`, matching core alias `0.2.9` (Vite `8.2.1`) | `npm run test:vite-plus-frameworks`; `npm run test:vite-plus` | Packed Vue/React/Solid/Svelte `.rs` production builds and Chromium interactions, strict declarations, dev rebuilds, Rust error recovery, rapid saves and host component edits. Rust edits use full reload. Normal npm installation uses the documented alias/overrides. |
+| Rspack / Rsbuild | Rspack `>=2.1.10`; Rsbuild `>=2.1.13` | `npm run test:rspack` | Packed Rust Vue/React/Rslib/native-Rspack fixtures with WASM, scoped CSS, lifecycle checks, mapped diagnostics, and rebuild recovery. `test:rust-bundlers` adds packed Vue/React `.rs` production builds, Stores, props/events, scoped CSS, and unmount/remount; Vue Rust-file watch also covers failure recovery, style edits and new modules; other framework/watch combinations remain unverified. |
+| Webpack | `>=5` | `npm run test:webpack` | Packed Rust Vue/React production and watch fixtures with emitted WASM, scoped CSS, lifecycle checks, mapped diagnostics, and recovery. `test:rust-bundlers` adds packed Vue/React `.rs` production builds, Stores, props/events, scoped CSS, and unmount/remount; Vue Rust-file watch also covers failure recovery, style edits and new modules; other framework/watch combinations remain unverified. |
 
 ## 0.2 alpha SSR additions
 
@@ -125,8 +136,9 @@ Next.js remains unverified. See the [SSR scope](./ssr-roadmap.md) for the API bo
 - Svelte 3/4, SvelteKit, Svelte SSR/hydration, and Svelte
   through Rspack/Webpack have no current compatibility claim. The Svelte row
   above is limited to its named Vite 7/8 + Chromium fixtures.
-- No precompiled component product is currently published; the Vue fixture is
-  build-contract evidence only.
+- The dedicated precompiled component-package builder and its Vue fixture are
+  retired on the current development line. Authors own component packaging;
+  see the [retirement record](../rfcs/0006-precompiled-vue-artifacts.md).
 - Webpack 4, Rspack versions below 2.1.10, Rollup, Turbopack, and other unlisted
   bundlers have no compatibility claim. The Turbopack API evidence and remaining integration questions are
   recorded in [Turbopack research](turbopack-research.md); exact Rspack evidence
@@ -135,9 +147,8 @@ Next.js remains unverified. See the [SSR scope](./ssr-roadmap.md) for the API bo
   it uses the normal `vooya()` Vite plugin. The pinned dev/build fixtures do not
   cover every bundled Vite+ tool or other Vite+ versions. See the
   [Vite+ setup](../guide/other-integrations.md#vite) for alias and override configuration.
-- The old `.voo` path was an exploratory intermediate. Remaining legacy fixtures
-  are repository regression evidence only and are not a supported authoring or
-  compatibility claim.
+- Current development accepts Rust sources only. Historical release behavior
+  is recorded separately in the [migration guide](retired-authoring.md).
 - Prerelease ABI revisions may be breaking. Use the `beta` channel and retain
   the lockfile; package versions are independent and internal dependencies are exact.
 - Vapor applications must use Vue's Vapor runtime, `createVaporApp`, and
