@@ -32,6 +32,6 @@
   "dependencies": {
     "@vooya/compiler": "0.1.0-beta.0",
     "@vooya/core": "0.1.0-beta.0",
-    "smol-toml": "1.8.0"
+    "smol-toml": "1.9.1"
   }
 }
