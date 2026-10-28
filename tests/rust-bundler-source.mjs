@@ -5,6 +5,7 @@ import { createServer } from "node:http";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
+import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 
@@ -172,6 +173,12 @@ config.plugins[0].toolchain = { mode: "system", cargoPath: wrapper };
 const compiler = build({ ...config, mode: "development" });
 compiler.hooks.invalid.tap("vooya-watch-test", () => console.log("WATCH_INVALID"));
 compiler.hooks.watchRun.tap("vooya-watch-test", () => console.log("WATCH_START"));
+let watchRuns = 0;
+// Force a follow-up compilation to outlive both the old 800 ms quiet window
+// and the new idle interval. An in-flight build must never count as settled.
+compiler.hooks.watchRun.tapPromise("vooya-watch-slow-runner", async () => {
+  if (++watchRuns === 2) await new Promise((done) => setTimeout(done, 2200));
+});
 compiler.hooks.done.tap("vooya-watch-test", () => console.log("WATCH_DONE"));
 const watcher = compiler.watch({ aggregateTimeout: 100 }, (error, stats) => {
   if (error || stats.hasErrors()) console.log("WATCH_ERROR", error?.message ?? stats.toString({ all: false, errors: true }));
@@ -185,17 +192,19 @@ process.on("SIGTERM", () => watcher.close(() => compiler.close(() => process.exi
   let lastWatchActivity = Date.now();
   let watchPending = true;
   const processHandle = spawn(process.execPath, ["watch.mjs"], { cwd: project, stdio: ["ignore", "pipe", "pipe"] });
-  const recordOutput = (chunk) => {
-    const text = chunk.toString();
-    output += text;
-    for (const event of text.matchAll(/WATCH_(INVALID|START|DONE|SUCCESS|ERROR)/g)) {
+  processHandle.stdout.on("data", (chunk) => { output += chunk; });
+  processHandle.stderr.on("data", (chunk) => { output += chunk; });
+  // stdout carries the lifecycle protocol. readline preserves complete markers
+  // across pipe chunks; stderr diagnostics must not splice into those markers.
+  const watchLines = createInterface({ input: processHandle.stdout });
+  watchLines.on("line", (line) => {
+    const event = /^WATCH_(INVALID|START|DONE|SUCCESS|ERROR)(?:\s|$)/.exec(line);
+    if (event) {
       lastWatchActivity = Date.now();
       if (event[1] === "INVALID" || event[1] === "START") watchPending = true;
       if (event[1] === "DONE") watchPending = false;
     }
-  };
-  processHandle.stdout.on("data", recordOutput);
-  processHandle.stderr.on("data", recordOutput);
+  });
   const successes = () => output.match(/WATCH_SUCCESS/g)?.length ?? 0;
   const watchState = () => ({
     invalid: output.match(/WATCH_INVALID/g)?.length ?? 0,
@@ -254,12 +263,13 @@ process.on("SIGTERM", () => watcher.close(() => compiler.close(() => process.exi
     const beforeUndo = successes();
     rmSync(undoSource);
     await waitFor(() => successes() > beforeUndo, () => output);
-    await settle(successes, () => output);
+    await settle(watchState, () => output);
     console.log(`Verified ${bundler} Rust-file watch: invalid Rust, recovery, stylesheet update, new .rs detection/recovery, edits during compilation, undo by deletion, and no generated-file rebuild loop.`);
   } catch (error) {
     console.error(output);
     throw error;
   } finally {
+    watchLines.close();
     processHandle.kill("SIGTERM");
     await Promise.race([new Promise((done) => processHandle.once("exit", done)), new Promise((done) => setTimeout(done, 3000))]);
     if (processHandle.exitCode === null) processHandle.kill("SIGKILL");
