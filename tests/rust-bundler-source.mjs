@@ -173,16 +173,23 @@ config.plugins[0].toolchain = { mode: "system", cargoPath: wrapper };
 const compiler = build({ ...config, mode: "development" });
 compiler.hooks.invalid.tap("vooya-watch-test", () => console.log("WATCH_INVALID"));
 compiler.hooks.watchRun.tap("vooya-watch-test", () => console.log("WATCH_START"));
-let watchRuns = 0;
-// Force a follow-up compilation to outlive both the old 800 ms quiet window
-// and the new idle interval. An in-flight build must never count as settled.
+let delayNextRun = false;
 compiler.hooks.watchRun.tapPromise("vooya-watch-slow-runner", async () => {
-  if (++watchRuns === 2) await new Promise((done) => setTimeout(done, 2200));
+  if (!delayNextRun) return;
+  delayNextRun = false;
+  console.log("WATCH_DELAY_START");
+  await new Promise((done) => setTimeout(done, 2200));
+  console.log("WATCH_DELAY_END");
 });
 compiler.hooks.done.tap("vooya-watch-test", () => console.log("WATCH_DONE"));
 const watcher = compiler.watch({ aggregateTimeout: 100 }, (error, stats) => {
   if (error || stats.hasErrors()) console.log("WATCH_ERROR", error?.message ?? stats.toString({ all: false, errors: true }));
   else console.log("WATCH_SUCCESS");
+});
+process.on("message", (message) => {
+  if (message !== "slow-rebuild") return;
+  delayNextRun = true;
+  watcher.invalidate();
 });
 process.on("SIGTERM", () => watcher.close(() => compiler.close(() => process.exit(0))));
 `);
@@ -191,7 +198,7 @@ process.on("SIGTERM", () => watcher.close(() => compiler.close(() => process.exi
   let output = "";
   let lastWatchActivity = Date.now();
   let watchPending = true;
-  const processHandle = spawn(process.execPath, ["watch.mjs"], { cwd: project, stdio: ["ignore", "pipe", "pipe"] });
+  const processHandle = spawn(process.execPath, ["watch.mjs"], { cwd: project, stdio: ["ignore", "pipe", "pipe", "ipc"] });
   processHandle.stdout.on("data", (chunk) => { output += chunk; });
   processHandle.stderr.on("data", (chunk) => { output += chunk; });
   // stdout carries the lifecycle protocol. readline preserves complete markers
@@ -220,6 +227,13 @@ process.on("SIGTERM", () => watcher.close(() => compiler.close(() => process.exi
     const initial = successes();
     await new Promise((done) => setTimeout(done, 1200));
     assert.equal(successes(), initial, `${bundler} rebuilt its own generated assets without an authored edit.\n${output}`);
+    // After startup convergence, explicitly rebuild unchanged inputs. This avoids
+    // a cold Cargo build while testing a pending run longer than the idle window.
+    processHandle.send("slow-rebuild");
+    await waitFor(() => output.includes("WATCH_DELAY_START"), () => output);
+    await settle(watchState, () => output);
+    assert.ok(output.includes("WATCH_DELAY_END") && successes() > initial,
+      `${bundler} settled before the delayed compilation completed.\n${output}`);
     // Simulate a second save after Cargo has already consumed the first edit.
     // The first artifact must not acknowledge that newer source fingerprint.
     writeFileSync(resolve(project, "race-edit.json"), JSON.stringify({ path: sourcePath, source: original.replace("Count: {}", "During build: {}") }));
