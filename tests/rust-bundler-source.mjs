@@ -170,6 +170,9 @@ process.exit(result.status ?? 1);
 chmodSync(wrapper, 0o755);
 config.plugins[0].toolchain = { mode: "system", cargoPath: wrapper };
 const compiler = build({ ...config, mode: "development" });
+compiler.hooks.invalid.tap("vooya-watch-test", () => console.log("WATCH_INVALID"));
+compiler.hooks.watchRun.tap("vooya-watch-test", () => console.log("WATCH_START"));
+compiler.hooks.done.tap("vooya-watch-test", () => console.log("WATCH_DONE"));
 const watcher = compiler.watch({ aggregateTimeout: 100 }, (error, stats) => {
   if (error || stats.hasErrors()) console.log("WATCH_ERROR", error?.message ?? stats.toString({ all: false, errors: true }));
   else console.log("WATCH_SUCCESS");
@@ -179,13 +182,32 @@ process.on("SIGTERM", () => watcher.close(() => compiler.close(() => process.exi
   const sourcePath = resolve(project, "Counter.rs");
   const original = readFileSync(sourcePath, "utf8");
   let output = "";
+  let lastWatchActivity = Date.now();
+  let watchPending = true;
   const processHandle = spawn(process.execPath, ["watch.mjs"], { cwd: project, stdio: ["ignore", "pipe", "pipe"] });
-  processHandle.stdout.on("data", (chunk) => { output += chunk; });
-  processHandle.stderr.on("data", (chunk) => { output += chunk; });
+  const recordOutput = (chunk) => {
+    const text = chunk.toString();
+    output += text;
+    for (const event of text.matchAll(/WATCH_(INVALID|START|DONE|SUCCESS|ERROR)/g)) {
+      lastWatchActivity = Date.now();
+      if (event[1] === "INVALID" || event[1] === "START") watchPending = true;
+      if (event[1] === "DONE") watchPending = false;
+    }
+  };
+  processHandle.stdout.on("data", recordOutput);
+  processHandle.stderr.on("data", recordOutput);
   const successes = () => output.match(/WATCH_SUCCESS/g)?.length ?? 0;
+  const watchState = () => ({
+    invalid: output.match(/WATCH_INVALID/g)?.length ?? 0,
+    starts: output.match(/WATCH_START/g)?.length ?? 0,
+    done: output.match(/WATCH_DONE/g)?.length ?? 0,
+    successes: successes(),
+    pending: watchPending,
+    lastActivity: lastWatchActivity,
+  });
   try {
     await waitFor(() => successes() > 0, () => output);
-    await settle(successes, () => output);
+    await settle(watchState, () => output);
     const initial = successes();
     await new Promise((done) => setTimeout(done, 1200));
     assert.equal(successes(), initial, `${bundler} rebuilt its own generated assets without an authored edit.\n${output}`);
@@ -195,7 +217,7 @@ process.on("SIGTERM", () => watcher.close(() => compiler.close(() => process.exi
     const beforeRace = successes();
     writeFileSync(sourcePath, original.replace("Count: {}", "First edit: {}"));
     await waitFor(() => output.includes("WATCH_RACE_EDIT") && successes() > beforeRace + 1, () => output);
-    await settle(successes, () => output);
+    await settle(watchState, () => output);
     await verify(project, "During build");
     writeFileSync(sourcePath, `${original}\ninvalid Rust\n`);
     await waitFor(() => output.includes("WATCH_ERROR"), () => output);
@@ -204,7 +226,7 @@ process.on("SIGTERM", () => watcher.close(() => compiler.close(() => process.exi
     writeFileSync(sourcePath, original.replace("Count: {}", "Recovered: {}"));
     await waitFor(() => successes() > beforeRecovery, () => output);
     await verify(project, "Recovered");
-    await settle(successes, () => output);
+    await settle(watchState, () => output);
     const recovered = successes();
     await new Promise((done) => setTimeout(done, 1200));
     assert.equal(successes(), recovered, `${bundler} did not settle after Rust recovery.\n${output}`);
@@ -212,7 +234,7 @@ process.on("SIGTERM", () => watcher.close(() => compiler.close(() => process.exi
     writeFileSync(stylePath, ".rust-counter { color: rgb(90, 30, 70); }\n");
     await waitFor(() => successes() > recovered, () => output);
     // Generated CSS can invalidate its Webpack module in the following watch pass.
-    await settle(successes, () => output);
+    await settle(watchState, () => output);
     await verify(project, "Recovered", "rgb(90, 30, 70)");
     const styled = successes();
     await new Promise((done) => setTimeout(done, 1200));
@@ -224,7 +246,7 @@ process.on("SIGTERM", () => watcher.close(() => compiler.close(() => process.exi
     const beforeNewFileRecovery = successes();
     writeFileSync(extraSource, "pub fn value() -> u32 { 1 }\n");
     await waitFor(() => successes() > beforeNewFileRecovery, () => output);
-    await settle(successes, () => output);
+    await settle(watchState, () => output);
     const errorsBeforeUndo = output.match(/WATCH_ERROR/g)?.length ?? 0;
     const undoSource = resolve(project, "Undo.rs");
     writeFileSync(undoSource, "invalid new Rust module\n");
@@ -252,12 +274,13 @@ async function waitFor(predicate, detail) {
   throw new Error(`Timed out waiting for Rust watch compilation.\n${detail()}`);
 }
 
-async function settle(count, detail) {
+async function settle(state, detail) {
   const deadline = Date.now() + 10000;
   while (Date.now() < deadline) {
-    const before = count();
-    await new Promise((done) => setTimeout(done, 800));
-    if (count() === before) return;
+    const current = state();
+    const idleFor = Date.now() - current.lastActivity;
+    if (!current.pending && idleFor >= 1600) return;
+    await new Promise((done) => setTimeout(done, 100));
   }
-  throw new Error(`Bundler did not settle after generated output.\n${detail()}`);
+  throw new Error(`Bundler did not settle after generated output.\n${JSON.stringify(state())}\n${detail()}`);
 }
